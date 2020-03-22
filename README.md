@@ -34,6 +34,12 @@
   Q8: 在Q1的基础上，假设用户下完单后没有及时付款，那么在规定的时间内未付款的话，此订单将被取消。这种case肯定是要用job来执行的，可是如果把job写在订单模块时，当订单模块有多个集群，那么此job就会跑多次，很浪费.`分布式系统job`
   A8: 可以添加一个job调度模块，为job调取模块至部署一个实例，然后通过RPC调用对应的服务
   
+  Q9: 对于客户端来说，需要记录后台各模块的ip地址和端口，对于前端而言，工作复杂且繁重。`分布式系统网关`
+  A9: 可以构建一个服务作为网关，由网关来做内部转发和过滤以及负载均衡工作
+  
+  Q10: 假设用户在发布商品的case中，需要上传图片，我们需要如何保证集群环境下都能使用到此图片
+  A10: 可以使用aliyun的oss或者自己搭建NFS文件共享服务器。大型项目推荐aliyun的oss，因为自己搭建NFS文件共享服务器，需要手动的在每台服务器上挂在共享目录
+  
   ```
 
 ## 二、概念
@@ -81,3 +87,4 @@
 ## 七、zookeeper
 
 * 连接: [https://github.com/AvengerEug/distributed/tree/develop/zookeeper](https://github.com/AvengerEug/distributed/tree/develop/zookeeper)
+
