@@ -12,15 +12,15 @@ clientPort=2181
 
 ## 二、操作
 
-|           操作           |         作用         |           示例            |          含义          | 注意事项                                                     |
-| :----------------------: | :------------------: | :-----------------------: | :--------------------: | ------------------------------------------------------------ |
-|        ls + 节点         |     查看指定节点     |           ls /            | 查看根节点下有哪些节点 |                                                              |
-| create + 节点 + 节点内容 |       创建节点       | create /eug "eug节点内容" | 在根节点下创建eug节点  | 节点内容必填，否则创建会创建失败(但不会报错，只不过是空的)，假设运行此命令: create /eug/test </br>那么执行ls /eug命令时，是看不到test节点的 |
-|        get + 节点        |     取节点的信息     |         get /eug          |   获取eug节点的信息    |                                                              |
-|      delete + 节点       |     删除指定节点     |        delete /eug        | 删除根节点下的eug节点  | 当前节点有子节点时，无法删除                                 |
-|        rmr + 节点        | 删除指定节点及子节点 |         rmr /eug          |                        | 可以删除节点及其子节点                                       |
-|      setAcl + 节点       |                      |                           |                        |                                                              |
-|      getAcl + 节点       |  获取某个节点的权限  |                           |                        |                                                              |
+|                 操作                 |         作用         |              示例              |                             含义                             | 注意事项                                                     |
+| :----------------------------------: | :------------------: | :----------------------------: | :----------------------------------------------------------: | ------------------------------------------------------------ |
+|              ls + 节点               |     查看指定节点     |              ls /              |                    查看根节点下有哪些节点                    |                                                              |
+|       create + 节点 + 节点内容       |       创建节点       |   create /eug "eug节点内容"    |                    在根节点下创建eug节点                     | 节点内容必填，否则创建会创建失败(但不会报错，只不过是空的)，假设运行此命令: create /eug/test </br>那么执行ls /eug命令时，是看不到test节点的 |
+|              get + 节点              |     取节点的信息     |            get /eug            |                      获取eug节点的信息                       |                                                              |
+|            delete + 节点             |     删除指定节点     |          delete /eug           |                    删除根节点下的eug节点                     | 当前节点有子节点时，无法删除                                 |
+|              rmr + 节点              | 删除指定节点及子节点 |            rmr /eug            |                                                              | 可以删除节点及其子节点                                       |
+| setAcl + 节点 + schema:id:permission |  为指定节点添加权限  | setAcl /eug world:anyone:cdrwa | 为/eug节点的任何人添加创建、删除、读取、写、以及再次更改权限的权限 |                                                              |
+|            getAcl + 节点             |  获取某个节点的权限  |          getAcl /eug           |                        获取/eug的权限                        |                                                              |
 
 ## 三、搭建zookeeper集群
 
@@ -273,7 +273,88 @@ clientPort=2181
 
 * 有三个客户端: zookeeper原生客户端、ZkClient、curator
 
-*  zookeeper的原生客户端可以对zookeeper的一些操作添加监听器。zookeeper会在客户端连接服务器、新增节点、删除节点、修改节点、修改子节点时发布一个时间，并通知所有的监听器。但监听器是一致性的，执行完一遍后不会再被触发。并且当客户端在给服务器发送心跳保证session不过期时，网络突然断了，而且等服务器的session过期后网络才好，此时客户端即使再重发心跳给服务端也没用了，因为服务端的session过期了，进而导致服务端对当前session的临时节点以及对临时节点的watcher都会无效
+* `zookeeper的原生客户端`: 可以对zookeeper的一些操作添加监听器。zookeeper会在`客户端连接服务器、新增节点、删除节点、修改节点、修改子节点`时发布一个事件，具体事件类型如下: 
+
+  ```java
+  None (-1),
+  NodeCreated (1),
+  NodeDeleted (2),
+  NodeDataChanged (3),
+  NodeChildrenChanged (4);
+  ```
+
+  并通知所有的监听器。但监听器是`一致性的，执行完一遍后不会再被触发`。并且当客户端在给服务器发送心跳保证session不过期时，网络突然断了，而且等服务器的session过期后网络才好，此时客户端即使再重发心跳给服务端也没用了，因为服务端的session过期了，进而导致服务端对当前session的临时节点以及对临时节点的watcher都会无效
+
+* `zkclient客户端`: 此客户端需要自己指定序列化对象，即要通过它来写数据、读数据，若读取其他序列化方式写入的数据，此客户端无法读取。但它解决了zookeeper原生客户端的监听器只能执行一次的问题.(需要添加zkclient-0.10.jar依赖包)
+
+  ```java
+  //TestZKClientReadData.java
+  public class TestZKClientReadData {
+  
+      public static void main(String[] args) throws IOException {
+          ZkClient zkClient = new ZkClient("192.168.111.146:2181", 10000, 10000, new SerializableSerializer());
+  
+          zkClient.subscribeDataChanges("/eug-zkclient", new IZkDataListener() {
+              @Override
+              public void handleDataChange(String s, Object o) throws Exception {
+                  System.out.println("节点修改数据的监听器");
+                  System.out.println("o : " + o);
+              }
+  
+              @Override
+              public void handleDataDeleted(String s) throws Exception {
+                  System.out.println("节点被删除的监听器");
+                  System.out.println("s: " + s);
+              }
+          });
+  
+          System.in.read();
+      }
+  }
+  
+  //TestZKClientWriteData.java
+  public class TestZKClientWriteData {
+  
+      public static void main(String[] args) {
+          ZkClient zkClient = new ZkClient("192.168.111.146:2181", 10000, 10000, new SerializableSerializer());
+  
+          //zkClient.createPersistent("/eug-zkclient", "eug-zkclient");
+          zkClient.writeData("/eug-zkclient", "eug-zkclient node content changed");
+      }
+  }
+  
+  // 先启动监听器, 在重写节点的程序
+  
+  ```
+
+* `curator客户端`: curator客户端是Netflix开源的一个客户端，里面的插件比较多，它的事件监听特性和原生zookeeper一致，不会被重复触发. 需要引入: `curator-client-2.12.0.jar, curator-framework-2.12.0.jar, curator-recipes-2.12.0.jar`三个依赖包
+
+  ```java
+  //TestCuratorClient.java
+  public class TestCuratorClient {
+  
+      public static void main(String[] args) throws Exception {
+          CuratorFramework curatorFramework = CuratorFrameworkFactory.newClient("192.168.111.146:2181", new RetryNTimes(2, 10000));
+          curatorFramework.start();
+  
+          byte[] bytes = curatorFramework.getData().forPath("/eug");
+          System.out.println(new String(bytes));
+  
+          curatorFramework.getData().usingWatcher(new CuratorWatcher() {
+              @Override
+              public void process(WatchedEvent watchedEvent) throws Exception {
+                  System.out.println("对/eug节点的监听器");
+              }
+          }).forPath("/eug");
+  
+  
+          System.in.read();
+  
+      }
+  }
+  ```
+
+  
 
 ## 九、ACL
 
@@ -363,4 +444,41 @@ clientPort=2181
   3. 每个节点有多个权限控制方案和多个权限
   ```
 
+
+## 十、Zookeeper有何应用场景
+
+* 要知道它有什么应用场景，还是要跟它的初衷说起。之前说到, zookeeper的出现是为了分布式系统CAP定理的一致性问题，而且它自带广播机制，于是我们产生了一些应用场景。如下
+
+  1. 分布式锁
+
+     ```
+     在秒杀系统中, 多个用户抢占数量为1的商品，我们采取锁表的机制是不可取的。因为系统会变得非常慢。这个时候我们可以借助zookeeper，当用户下单时，因为集群的原因，可能会有不同的用户下单的请求到达不同的服务器上。这个时候，我们可以将在下单操作执行前先跟zookeeper交互一下(zookeeper肯定也是集群的), 于是每个服务器跟zookeeper的交互可能会在不同的zookeeper实例中。那这个时候，哪个服务器在zookeeper中成功的创建了一个节点，那就说明这个服务器有下单的权限，进而进行下单操作。在这个创建节点的过程中，就是分布式锁的精髓
+     ```
+     ![秒杀库存为1的商品.png](https://github.com/AvengerEug/distributed/blob/develop/zookeeper/秒杀库存为1的商品.png)
+     
+  2. 分布式系统配置中心
   
+     ```
+     在分布式系统中，不同的应用程序或者相同的应用程序会部署在不同的机器上。若配置发生改变，我们需要一个个的去更新代码，重启服务器。就算集成了CI，把同步代码部署的步骤给自动化了，但是却还需要重启服务器。我们如何做到在不重启服务器的情况下，完成同步配置呢？最好的方式就是我们修改配置后，将修改的配置通知给各个服务器，让程序更新已加载到内存中的配置。 因为zookeeper有watch机制, 所以我们可以将分布式系统的所有机器都连接上zookeeper, 并对自己感兴趣的节点添加监听器，当我们把更新后的配置存储到它们监听的节点上时，zookeeper会发布一个修改节点的事件(包括修改后的数据)，这样，我们就可以在获取到更新后的配置，并加载到内存中了
+     ```
+     ![分布式配置中心.png](https://github.com/AvengerEug/distributed/blob/develop/zookeeper/分布式配置中心.png)
+  
+  3. 分布式队列
+  
+     ```
+     因为zookeeper中存在临时顺序节点的特性，所以我们可以将某一个父节点(比如/distributed_que)下面的临时顺序节点当做队列中的元素。当消费者发现/distributed_que节点下面无临时顺序节点时则阻塞，有则拿最小的节点消费(保证了FIFO)，最后删除(或者回话过期后自动删除).生产者生产了新的东西时，往/distributed_que添加一个节点。
+     ```
+     ![分布式队列.png](https://github.com/AvengerEug/distributed/blob/develop/zookeeper/分布式队列.png)
+  
+  4. 分布式命名服务
+  
+     ```
+     同上也是利用了zookeeper的顺序节点特性以及强一致性。这里就不阐述了
+     ```
+  
+     
+
+
+​     
+
+​     
