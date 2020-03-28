@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.eugene.zookeeper.distributedlock.dao.GoodsDao">
+
+    <resultMap type="Goods" id="goodsMap">
+        <id column="goods_id" property="goodsId"/>
+        <result column="goods_name" property="goodsName"/>
+        <result column="goods_stock" property="goodsStock"/>
+    </resultMap>
+
+    <sql id="fields">
+        goods_id, goods_name, goods_stock
+    </sql>
+
+    <select id="getById" parameterType="long" resultMap="goodsMap">
+        SELECT * FROM goods WHERE goods_id = #{goodsId}
+    </select>
+
+    <update id="reduceStock" parameterType="map">
+        UPDATE goods SET goods_stock = goods_stock - #{count} WHERE goods_id = #{goodsId}
+    </update>
+
+</mapper>
