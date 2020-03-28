@@ -13,7 +13,7 @@ public class Entry {
     public static void main(String[] args) {
         AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(AppConfig.class);
 
-        for (int i = 1; i <= 30; i++) {
+        for (int i = 1; i <= 200; i++) {
             new Thread(new UserThread(), "用户" + i).start();
         }
 
