@@ -1,5 +1,6 @@
 package com.eugene.zookeeper.distributedlock.thread;
 
+import com.eugene.zookeeper.distributedlock.constants.Constants;
 import com.eugene.zookeeper.distributedlock.context.SpringContextHolder;
 import com.eugene.zookeeper.distributedlock.model.Goods;
 import com.eugene.zookeeper.distributedlock.service.GoodsService;
@@ -9,6 +10,7 @@ import org.apache.curator.retry.RetryNTimes;
 import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.WatchedEvent;
 import org.apache.zookeeper.Watcher;
+import org.apache.zookeeper.data.Stat;
 import org.springframework.util.ObjectUtils;
 
 import java.util.Collections;
@@ -19,11 +21,34 @@ public class UserThread implements Runnable {
 
     private static final long GOODS_ID = 1L;
 
-    private static final String ZOOKEEPER_HOST = "192.168.111.146:2181";
+    private static final String ZOOKEEPER_HOST = Constants.ZOOKEEPER_HOST;
 
     private static final String ROOT_NODE = "/distributed_lock";
 
     private String createdNodeName = null;
+
+    private CuratorFramework curatorFramework = null;
+
+    {
+        prepareEnv();
+        prepareRootNode();
+    }
+
+    private void prepareEnv() {
+        curatorFramework = connect();
+        curatorFramework.start();
+    }
+
+    private void prepareRootNode() {
+        try {
+            Stat stat = curatorFramework.checkExists().forPath(ROOT_NODE);
+            if (ObjectUtils.isEmpty(stat)) {
+                curatorFramework.create().withMode(CreateMode.PERSISTENT).forPath(ROOT_NODE);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
 
     /**
      * 分布式锁思路:
@@ -37,11 +62,8 @@ public class UserThread implements Runnable {
      */
     @Override
     public void run() {
-        CuratorFramework curatorFramework = null;
-        try {
-            curatorFramework = connect();
-            curatorFramework.start();
 
+        try {
             if (lock(curatorFramework)) createOrder();
 
         } catch (Exception e) {

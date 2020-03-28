@@ -1,5 +1,6 @@
 package com.eugene.zookeeper.distributedlock.conf;
 
+import com.eugene.zookeeper.distributedlock.constants.Constants;
 import org.mybatis.spring.SqlSessionFactoryBean;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.context.annotation.Bean;
@@ -18,7 +19,7 @@ public class AppConfig {
     @Bean
     public DataSource dataSource() {
         DriverManagerDataSource driverManagerDataSource = new DriverManagerDataSource();
-        driverManagerDataSource.setUrl("jdbc:mysql://192.168.111.145:3306/goods?useUnicode=true&characterEncoding=utf-8&useSSL=false&allowMultiQueries=true");
+        driverManagerDataSource.setUrl("jdbc:mysql://" + Constants.MYSQL_HOST + "/goods?useUnicode=true&characterEncoding=utf-8&useSSL=false&allowMultiQueries=true");
         driverManagerDataSource.setUsername("root");
         driverManagerDataSource.setPassword("root");
         driverManagerDataSource.setDriverClassName("com.mysql.jdbc.Driver");
