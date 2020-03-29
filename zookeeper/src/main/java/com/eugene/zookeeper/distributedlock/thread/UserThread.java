@@ -31,7 +31,6 @@ public class UserThread implements Runnable {
 
     {
         prepareEnv();
-        prepareRootNode();
     }
 
     private void prepareEnv() {
@@ -39,16 +38,6 @@ public class UserThread implements Runnable {
         curatorFramework.start();
     }
 
-    private void prepareRootNode() {
-        try {
-            Stat stat = curatorFramework.checkExists().forPath(ROOT_NODE);
-            if (ObjectUtils.isEmpty(stat)) {
-                curatorFramework.create().withMode(CreateMode.PERSISTENT).forPath(ROOT_NODE);
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
 
     /**
      * 分布式锁思路:
@@ -79,7 +68,7 @@ public class UserThread implements Runnable {
     private boolean lock(CuratorFramework curatorFramework) throws Exception {
         // 每个线程创建一个临时顺序节点, 返回的节点名是全名, eg: /distributed_local/goods_seq0000000001
         createdNodeName = curatorFramework
-                .create()
+                .create().creatingParentContainersIfNeeded()
                 .withMode(CreateMode.EPHEMERAL_SEQUENTIAL)
                 .forPath(ROOT_NODE + "/goods_seq");
         System.out.println(currentThreadName() + "创建临时顺序节点: " + createdNodeName);
