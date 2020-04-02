@@ -1,12 +1,12 @@
-package com.eugene.sumarry.resourcecode.service;
+package com.eugene.sumarry.aopsumioc;
 
 import org.apache.dubbo.common.URL;
 import org.apache.dubbo.common.extension.Adaptive;
 import org.apache.dubbo.common.extension.SPI;
 
 @SPI
-public interface IndexService {
+public interface GoodsService {
 
-    @Adaptive("aaaaa")
-    void index(URL url);
+    @Adaptive("goodsService")
+    void findGoods(URL url);
 }

@@ -1,0 +1,2 @@
+orderService=com.eugene.sumarry.aopsumioc.impl.OrderServiceImpl
+orderServiceLogWrapper=com.eugene.sumarry.aopsumioc.impl.OrderServiceImplLogWrapper

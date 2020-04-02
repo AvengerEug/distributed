@@ -1,3 +1,0 @@
-woman=com.eugene.sumarry.resourcecode.service.impl.WomanServiceImpl
-man=com.eugene.sumarry.resourcecode.service.impl.ManServiceImpl
-com.eugene.sumarry.resourcecode.service.impl.WomanWrapperServiceImpl
