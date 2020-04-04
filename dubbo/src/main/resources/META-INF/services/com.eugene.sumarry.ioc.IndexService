@@ -1,0 +1,3 @@
+indexServiceImpl=com.eugene.sumarry.ioc.impl.IndexServiceImpl
+indexServiceImpl1=com.eugene.sumarry.ioc.impl.IndexServiceImpl1
+indexServiceImpl2=com.eugene.sumarry.ioc.impl.IndexServiceImpl2

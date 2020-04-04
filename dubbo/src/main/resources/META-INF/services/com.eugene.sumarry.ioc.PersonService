@@ -1,0 +1,2 @@
+woman=com.eugene.sumarry.ioc.impl.WomanServiceImpl
+man=com.eugene.sumarry.ioc.impl.ManServiceImpl
