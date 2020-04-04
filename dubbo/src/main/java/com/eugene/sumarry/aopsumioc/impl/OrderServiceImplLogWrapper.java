@@ -1,7 +1,6 @@
 package com.eugene.sumarry.aopsumioc.impl;
 
 import com.eugene.sumarry.aopsumioc.OrderService;
-import org.apache.dubbo.common.URL;
 
 public class OrderServiceImplLogWrapper implements OrderService {
 
