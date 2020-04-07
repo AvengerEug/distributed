@@ -86,5 +86,7 @@
 
 ## 七、zookeeper
 
-* 连接: [https://github.com/AvengerEug/distributed/tree/develop/zookeeper](https://github.com/AvengerEug/distributed/tree/develop/zookeeper)
+* 链接: [https://github.com/AvengerEug/distributed/tree/develop/zookeeper](https://github.com/AvengerEug/distributed/tree/develop/zookeeper)
 
+## 八、Dubbo
+* 链接: [https://github.com/AvengerEug/distributed/tree/develop/dubbo](https://github.com/AvengerEug/distributed/tree/develop/dubbo)
