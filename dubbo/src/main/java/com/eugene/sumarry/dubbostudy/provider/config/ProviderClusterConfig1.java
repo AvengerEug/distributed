@@ -7,7 +7,7 @@ import org.springframework.context.annotation.FilterType;
 import org.springframework.context.annotation.PropertySource;
 
 @Configuration
-@EnableDubbo(scanBasePackages = "com.eugene.sumarry.dubbostudy.provider.service.impl")
+@EnableDubbo(scanBasePackages = "com.eugene.sumarry.dubbostudy.provider")
 @ComponentScan(
         basePackages = "com.eugene.sumarry.dubbostudy.provider",
         excludeFilters = {
