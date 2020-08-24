@@ -15,4 +15,11 @@ public class DemoServiceImpl implements DemoService {
 
         return "调用者: " + url.getAddress() + " 传入参数: " + content + " 协议: " + url.getProtocol();
     }
+
+    @Override
+    public String say2(String content) {
+        URL url = RpcContext.getContext().getUrl();
+
+        return "调用者: " + url.getAddress() + " 传入参数: " + content + " 协议: " + url.getProtocol();
+    }
 }

@@ -3,6 +3,7 @@ package com.eugene.sumarry.dubbostudy.consumer.service.impl;
 import com.eugene.sumarry.dubbostudy.consumer.service.ConsumerService;
 import com.eugene.sumarry.dubbostudy.provider.service.DemoService;
 import org.apache.dubbo.config.annotation.Reference;
+import org.apache.dubbo.rpc.RpcContext;
 import org.springframework.stereotype.Service;
 
 import java.util.concurrent.TimeUnit;
