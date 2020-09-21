@@ -319,7 +319,7 @@ clientPort=2181
           ZkClient zkClient = new ZkClient("192.168.111.146:2181", 10000, 10000, new SerializableSerializer());
   
           //zkClient.createPersistent("/eug-zkclient", "eug-zkclient");
-          zkClient.writeData("/eug-zkclient", "eug-zkclient node content changed");
+          zkClient.writeData("/eug-zkclient", "eug-zkclient listNode content changed");
       }
   }
   
