@@ -32,8 +32,8 @@ public class UserServiceImplProxy2 implements UserService {
 
     @Override
     public void findUsers() {
-        System.out.println("before");
+        System.out.println("before 2");
         userService.findUsers();
-        System.out.println("after");
+        System.out.println("after 2");
     }
 }

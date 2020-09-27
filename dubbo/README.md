@@ -4,14 +4,15 @@
 
 ### 1.1 AOP
 
-* aop的实现原理比较简单，都是通过**ExtensionLoader**的**injectionExtension**方法完成的，只需要在spi文件中配置wrapper类即可(所谓wrapper类就是当前实现类中存在一个带一个参数构造方法，且此构造方法的参数类型就是接口类型)。具体有如下几个条件:
+* aop的实现原理比较简单，都是通过**ExtensionLoader**的**injectionExtension**方法完成的，只需要在spi文件中配置wrapper类即可(**所谓wrapper类就是当前实现类中存在一个带一个参数构造方法，且此构造方法的参数类型就是接口类型**)。具体有如下几个条件:
 
   ```txt
   1. 接口要添加@SPI注解
   2. spi中配置的实现类中要有wrapper类
+  3. 实现类中要有带参构造方法，且参数为接口的类型
   ```
 
-* **注意点:**: 若有多个wrapper类，则会递归的包装，按照spi文件中配置的顺序，下面的wrapper包装上面的wrapper。
+* **注意点:**: 若有多个wrapper类，则会递归的包装，按照spi文件中配置的顺序，**下面**的wrapper包装**上面**的wrapper，即下面的代理上面的
 
 * 写一个例子:
 
@@ -96,10 +97,11 @@
 
      ```properties
      userService=com.eugene.sumarry.aop.UserServiceImpl
-     userServiceProxy=com.eugene.sumarry.aop.UserServiceImplProxy
+     userServiceProxy1=com.eugene.sumarry.aop.UserServiceImplProxy1
+     userServiceProxy2=com.eugene.sumarry.aop.UserServiceImplProxy2
      ```
 
-  6. 通过**ExtensionLoader.getExtensionLoader(UserService.class).getExtension("userService")**获取的UserService对象是被包装了三层的**UserServiceImpl**对象，最外面一层为: **UserServiceImplProxy2**, 其次为**UserServiceImplProxy1**, 最里面为自身**UserServiceImpl**。但要注入，如果我们要单独获取**UserServiceImplProxy1**对象时是获取不到的，因为dubbo只支持从**cachedClasses**属性中去找name，而只有实现类中无@Adaptive注解、@Active注解、非包装类的情况下，它在spi配置的name才会被加载到**cachedClasses**中
+  6. 通过**ExtensionLoader.getExtensionLoader(UserService.class).getExtension("userService")**获取的UserService对象是被包装了三层的**UserServiceImpl**对象，最外面一层为: **UserServiceImplProxy2**, 其次为**UserServiceImplProxy1**, 最里面为自身**UserServiceImpl**。但要注意，如果我们要单独获取**UserServiceImplProxy1**对象时是获取不到的，因为dubbo只支持从**cachedClasses**属性中去找name，而只有实现类中无@Adaptive注解、无@Active注解、非包装类的情况下，它在spi配置的name才会被加载到**cachedClasses**中 ===> 白话理解就是：普通类才会添加到**cachedClasses**中去
 
 ### 1.2 IOC
 
@@ -277,4 +279,72 @@
 |          XML配置          | 方法级 > 接口级 > 全局配置(**如果级别一样，消费方优先，提供方次之**) | 谁的级别高，则采用谁                                         |
 |         属性配置          |        -D(JVM的-D参数) > XML配置 > properties配置文件        | 1：如果在classpath下有超过一个dubbo.properties文件，比如，两个jar包都各自包含了dubbo.properties，dubbo将随机选择一个加载，并且打印错误日志<br>2：如果 `id`没有在`protocol`中配置，将使用`name`作为默认属性。 |
 | Dubbo启动加载配置文件顺序 | -D系统参数 > 外部化配置(配置中心) > spring或者通过api的方式配置 > 本地文件dubbo.properties |                                                              |
+
+## 三、Dubbo类扩展器加载过程
+
+![类扩展器加载过程](./类加载器初始化过程.png)
+
+* 文字总结下流程
+
+  > 1、第一步：初始化ExtensionFactory时，会去加载org.apache.dubbo.common.extension.ExtensionFactory的spi文件
+  >
+  > ```properties
+  > adaptive=org.apache.dubbo.common.extension.factory.AdaptiveExtensionFactory
+  > spi=org.apache.dubbo.common.extension.factory.SpiExtensionFactory
+  > spring=org.apache.dubbo.config.spring.extension.SpringExtensionFactory
+  > ```
+  >
+  > 在解析的过程中，会对每种类型的class做不同的处理。
+  >
+  > `第一：`类中有@Adaptive注解存在，则存到cachedAdaptiveClass变量中，此变量就是一个Class类型的变量，这也就说明，如果一个接口在SPI文件中配置了多个实现类，并且包含@Adaptive注解的实现类的个数超过了1，此时就会报错，源码如下
+  >
+  > ```java
+  > private volatile Class<?> cachedAdaptiveClass = null;
+  > 
+  > // ......
+  > 
+  > if (clazz.isAnnotationPresent(Adaptive.class)) {
+  >     if (cachedAdaptiveClass == null) {
+  >         cachedAdaptiveClass = clazz;
+  >     } else if (!cachedAdaptiveClass.equals(clazz)) {
+  >         throw new IllegalStateException("More than 1 adaptive class found: "
+  >                                         + cachedAdaptiveClass.getClass().getName()
+  >                                         + ", " + clazz.getClass().getName());
+  >     }
+  > }
+  > ```
+  >
+  > `第二：`是否为包装类，如果是包装类，则将类信息保存在叫**cachedWrapperClasses**的set集合中，源码如下：
+  >
+  > ```java
+  > if (isWrapperClass(clazz)) {
+  >     Set<Class<?>> wrappers = cachedWrapperClasses;
+  >     if (wrappers == null) {
+  >         cachedWrapperClasses = new ConcurrentHashSet<Class<?>>();
+  >         wrappers = cachedWrapperClasses;
+  >     }
+  >     wrappers.add(clazz);
+  > }
+  > 
+  > /* 
+  > 其中isWrapperClass的逻辑大致为：
+  > 判断该Class中带一个参数的构造方法，且形参是否为自己实现的接口类型。
+  > */
+  > ```
+  >
+  > 
+  >
+  > 
+  >
+  > 并挨个创建**AdaptiveExtensionFactory、SpiExtensionFactory、SpringExtensionFactory**对象，其中在创建**AdaptiveExtensionFactory**对象时，在构造方法中还调用了如下代码：
+  >
+  > ```java
+  > ExtensionLoader.getExtensionLoader(ExtensionFactory.class)
+  > ```
+  >
+  > 这意味着又要获取类型为**ExtensionFactory**的extensionLoader了，奈何这个loader只要初始化一次就会保存在缓存中，因此这次是从缓存中获取的。
+  >
+  > 
+  >
+  > 
 
