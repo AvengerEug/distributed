@@ -284,7 +284,7 @@
 
 ![类扩展器加载过程](./类加载器初始化过程.png)
 
-* 文字总结下流程
+* 文字总结下流程(加载spi文件步骤)
 
   > 1、第一步：初始化ExtensionFactory时，会去加载org.apache.dubbo.common.extension.ExtensionFactory的spi文件
   >
@@ -294,7 +294,7 @@
   > spring=org.apache.dubbo.config.spring.extension.SpringExtensionFactory
   > ```
   >
-  > 在解析的过程中，会对每种类型的class做不同的处理。
+  > 在解析的过程中，会对每种类型的class做不同的处理(主要参考**org.apache.dubbo.common.extension.ExtensionLoader#loadClass**方法)。
   >
   > `第一：`类中有@Adaptive注解存在，则存到cachedAdaptiveClass变量中，此变量就是一个Class类型的变量，这也就说明，如果一个接口在SPI文件中配置了多个实现类，并且包含@Adaptive注解的实现类的个数超过了1，此时就会报错，源码如下
   >
@@ -304,10 +304,10 @@
   > // ......
   > 
   > if (clazz.isAnnotationPresent(Adaptive.class)) {
-  >     if (cachedAdaptiveClass == null) {
-  >         cachedAdaptiveClass = clazz;
-  >     } else if (!cachedAdaptiveClass.equals(clazz)) {
-  >         throw new IllegalStateException("More than 1 adaptive class found: "
+  >  if (cachedAdaptiveClass == null) {
+  >      cachedAdaptiveClass = clazz;
+  >  } else if (!cachedAdaptiveClass.equals(clazz)) {
+  >      throw new IllegalStateException("More than 1 adaptive class found: "
   >                                         + cachedAdaptiveClass.getClass().getName()
   >                                         + ", " + clazz.getClass().getName());
   >     }
@@ -332,17 +332,49 @@
   > */
   > ```
   >
-  > 
-  >
-  > 
-  >
-  > 并挨个创建**AdaptiveExtensionFactory、SpiExtensionFactory、SpringExtensionFactory**对象，其中在创建**AdaptiveExtensionFactory**对象时，在构造方法中还调用了如下代码：
+  > 第三：spi中配置的实现类是一个被@Activate注解修饰的类，会被缓存到cachedActivates的map中去，源码如下：
   >
   > ```java
-  > ExtensionLoader.getExtensionLoader(ExtensionFactory.class)
+  > private void cacheActivateClass(Class<?> clazz, String name) {
+  >     Activate activate = clazz.getAnnotation(Activate.class);
+  >     if (activate != null) {
+  >         cachedActivates.put(name, activate);
+  >     } else {
+  >         // support com.alibaba.dubbo.common.extension.Activate
+  >         com.alibaba.dubbo.common.extension.Activate oldActivate = clazz.getAnnotation(com.alibaba.dubbo.common.extension.Activate.class);
+  >         if (oldActivate != null) {
+  >             cachedActivates.put(name, oldActivate);
+  >         }
+  >     }
+  > }
   > ```
   >
-  > 这意味着又要获取类型为**ExtensionFactory**的extensionLoader了，奈何这个loader只要初始化一次就会保存在缓存中，因此这次是从缓存中获取的。
+  > 第四：将当前spi中配置的名称缓存到当前ExtensionLoader对应的cachedNames中，其中cachedNames是一个juc下面的map，key为当前spi文件中配置的value(会转换成Class对象)，value为spi中配置的名称, 与cachedClasses属性缓存的相反，cachedClasses内部的data是一个map，其中key为spi中配置的名称，value为spi中配置的value。源码如下：
+  >
+  > ```java
+  > private void cacheName(Class<?> clazz, String name) {
+  >     if (!cachedNames.containsKey(clazz)) {
+  >         cachedNames.put(clazz, name);
+  >     }
+  > }
+  > ```
+  >
+  > 第五：将解析spi出来的类全部存到传入的extensionClasses参数中，最终会存到当前ExtensionLoader的cachedClasses属性中。源码如下：
+  >
+  > ```java
+  > private void saveInExtensionClass(Map<String, Class<?>> extensionClasses, Class<?> clazz, String name) {
+  >     Class<?> c = extensionClasses.get(name);
+  >     if (c == null) {
+  >         extensionClasses.put(name, clazz);
+  >     } else if (c != clazz) {
+  >         throw new IllegalStateException("Duplicate extension " + type.getName() + " name " + name + " on " + c.getName() + " and " + clazz.getName());
+  >     }
+  > }
+  > ```
+  >
+  > 
+  >
+  > 
   >
   > 
   >
