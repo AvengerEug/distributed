@@ -280,11 +280,15 @@
 |         属性配置          |        -D(JVM的-D参数) > XML配置 > properties配置文件        | 1：如果在classpath下有超过一个dubbo.properties文件，比如，两个jar包都各自包含了dubbo.properties，dubbo将随机选择一个加载，并且打印错误日志<br>2：如果 `id`没有在`protocol`中配置，将使用`name`作为默认属性。 |
 | Dubbo启动加载配置文件顺序 | -D系统参数 > 外部化配置(配置中心) > spring或者通过api的方式配置 > 本地文件dubbo.properties |                                                              |
 
-## 三、Dubbo类扩展器加载过程
+## 三、Dubbo类扩展器加载过程(官网叫：Dubbo SPI)
 
 ![类扩展器加载过程](./类加载器初始化过程.png)
 
-* 文字总结下流程(加载spi文件步骤)
+### 3.1  加载SPI步骤
+
+* 参考官网：[Dubbo SPI](http://dubbo.apache.org/zh-cn/docs/source_code_guide/dubbo-spi.html)
+
+* 文字总结下流程(**加载spi文件步骤，其中每次需要获取新的ExtensionLoader和第一次创建adaptivExtension时都会对对应的SPI文件进行扫描和解析**)
 
   > 1、第一步：初始化ExtensionFactory时，会去加载org.apache.dubbo.common.extension.ExtensionFactory的spi文件
   >
@@ -372,11 +376,137 @@
   > }
   > ```
   >
-  > 
+  > 上述五步还只是将Type为ExtensionFactory的ExtensionLoader已经加载完毕了，当把Type为ExtensionFactory的ExtensionLoader加载完毕后才是真正开始加载Type为UserService的ExtensionLoader了。加载Type为UserService的ExtensionLoader步骤也是一摸一样，唯一不同的就是在构建objectFactory属性时，默认情况下会将**AdaptiveExtensionFactory**类给填充进去，而type为ExtensionFactory的objectFactory属性为null。
   >
-  > 
+
+## 四、getExtension api获取实例过程
+
+* 此步骤会涉及到上文第一章提到的AOP和IOC，其中IOC功能在官网给的专业术语为：**自适应扩展机制**
+
+* 整个获取实例源码如下：
+
+  ```java
+      public T getExtension(String name) {
+          if (StringUtils.isEmpty(name)) {
+              throw new IllegalArgumentException("Extension name == null");
+          }
+          if ("true".equals(name)) {
+              return getDefaultExtension();
+          }
+          final Holder<Object> holder = getOrCreateHolder(name);
+          Object instance = holder.get();
+          if (instance == null) {
+              synchronized (holder) {
+                  instance = holder.get();
+                  if (instance == null) {
+                      instance = createExtension(name);
+                      holder.set(instance);
+                  }
+              }
+          }
+          return (T) instance;
+      }
+  ```
+
+  
+
+* 整个获取实例过程可由下图总结：
+
+  ![Dubbo从ExtensionLoader获取对象流程.png](./Dubbo从ExtensionLoader获取对象流程.png)
+
+### 4.1  依赖注入(IOC)过程
+
+* 源码如下：
+
+  ```java
+  private T injectExtension(T instance) {
+      try {
+          if (objectFactory != null) {
+              for (Method method : instance.getClass().getMethods()) {
+                  // 检测方法是否以 set 开头，且方法仅有一个参数，且方法访问级别为 public
+                  if (isSetter(method)) {
+                      if (method.getAnnotation(DisableInject.class) != null) {
+                          continue;
+                      }
+                      Class<?> pt = method.getParameterTypes()[0];
+                      if (ReflectUtils.isPrimitives(pt)) {
+                          continue;
+                      }
+                      try {
+                          // 获取方法后面的签名，eg: 方法名为：setVersion, 调用此方法后，将返回version
+                          String property = getSetterProperty(method);
+                          /**
+                          * 注入进去的对象主要由如下代码决定，其中objectFactory的属性为adaptiveExtensionFactory
+                          * 其中内部维护了两个ExtensionFactory，分别为：
+                          * @see SpiExtensionFactory  -> 普通情况下，使用的是此ExtensionFactory，且调用getExtesion方法时，返回的是一个adaptiveExtension，此种情况下，属性名没什么作用
+                          * @see org.apache.dubbo.config.spring.extension.SpringExtensionFactory  -> 用于从 Spring 的 IOC 容器中获取所需的拓展
+                          */
+                          Object object = objectFactory.getExtension(pt, property);
+                          if (object != null) {
+                              method.invoke(instance, object);
+                          }
+                      } catch (Exception e) {
+                          logger.error("Failed to inject via method " + method.getName()
+                                       + " of interface " + type.getName() + ": " + e.getMessage(), e);
+                      }
+                  }
+              }
+          }
+      } catch (Exception e) {
+          logger.error(e.getMessage(), e);
+      }
+      return instance;
+  }
+  ```
+
+  由上述的总结可知，objectFactory属性的值就是**AdaptiveExtensionFactory**。整个依赖注入的过程比较简单：
+
+  > 第一：判断当前扩展类是否符合注入条件，遍历所有方法，并根据如下条件挨个判断
   >
-  > 
+  > | **set开头的方法**                 |
+  > | --------------------------------- |
+  > | **方法中无DisableInject注解标识** |
+  > | **方法非private修饰**             |
   >
-  > 
+  > 第二：上述三个条件同时满足时才会进行依赖注入，大致的流程就是使用反射调用set方法，但是调用前需要获取到填充到set方法的参数，而这个参数就是通过**objectFactory.getExtension(pt, property);**获取，其中objectFactory为**AdaptiveExtensionFactory**，它内部维护了两个ExtensionFactory，一个为SpiExtensionFactory另外一个是SpringExtensionFactory，两者都是获取Extension的工厂，具体细节如下表所示：
+  >
+  > |  ExtensionFactory类别  |                             作用                             |                             备注                             |
+  > | :--------------------: | :----------------------------------------------------------: | :----------------------------------------------------------: |
+  > |  SpiExtensionFactory   | 根据传入的class，调用ExtensionLoadet.getExtension api来获取对象 | 内部获取的是对应Type的AdaptiveExtension类。要获取AdaptiveExtension类有两种渠道：<br>1、自己实现。自己在实现类中指定某个类为AdaptiveExtension(添加@Adaptive注解）<br>2、使用dubbo框架动态生成，接口中存在@Adaptive修饰的方法且方法参数为**org.apache.dubbo.common.URL** |
+  > | SpringExtensionFactory |        根据传入的class和name，从spring容器中获取bean         |                      从spring中获取bean                      |
+  >
+  > 总结：依赖注入的过程如果失败了，并不会影响整个过程，仅仅对应属性的值为null而已。
+
+### 4.2 构建Wrapper类过程(AOP)
+
+* 源码如下：
+
+  ```java
+  private T createExtension(String name) {
+  	// 省略部分代码.....
+      try {
+          // 省略部分代码.....
+  		
+          Set<Class<?>> wrapperClasses = cachedWrapperClasses;
+          // 获取所有的wrapper类，并挨个调用他们的构造方法，并挨个进行依赖注入
+          if (CollectionUtils.isNotEmpty(wrapperClasses)) {
+              for (Class<?> wrapperClass : wrapperClasses) {
+                  instance = injectExtension((T) wrapperClass.getConstructor(type).newInstance(instance));
+              }
+          }
+          return instance;
+      } catch (Throwable t) {
+          throw new IllegalStateException("Extension instance (name: " + name + ", class: " +
+                                          type + ") couldn't be instantiated: " + t.getMessage(), t);
+      }
+  }
+  ```
+
+* 总结如下：
+
+  > 整个过程还是比较简单的，如果对Wrapper类的概念比较清楚的话，这个步骤还是很简单的，总共两个步骤：
+  >
+  > 1、调用有参构造方法创建Wrapper类
+  >
+  > 2、对创建出来的Wrapper类进行依赖注入
 
