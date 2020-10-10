@@ -525,3 +525,44 @@
   > 2、导出服务：包含导出服务到本地(JVM)和导出服务到远程两个步骤
   >
   > 3、注册至注册中心：向注册中心注册服务，用于服务发现
+
+### 5.1 以官网Demo dubbo-demo-xml 模块为例解析服务导出流程
+
+#### 5.1.1 Dubbo集成spring的第一个扩展点`NamespaceHandlerSupport`
+
+* 以xml的格式来启动spring上下文，其中我们可以在xml中写如下类似的标签：
+
+  ```xml
+  <dubbo:service id="test" interface="org.apache.dubbo.demo.DemoService" ref="demoService"/>
+  ```
+
+  这种标签，最终会被spring给解析出来，会对应**ServiceBean**类。这样的结果是有地方配置的，详看**org.apache.dubbo.config.spring.schema.DubboNamespaceHandler**类。其中主要看它的`init`方法，如下：
+
+  ```java
+  @Override
+  public void init() {
+      registerBeanDefinitionParser("application", new DubboBeanDefinitionParser(ApplicationConfig.class, true));
+      registerBeanDefinitionParser("module", new DubboBeanDefinitionParser(ModuleConfig.class, true));
+      registerBeanDefinitionParser("registry", new DubboBeanDefinitionParser(RegistryConfig.class, true));
+      registerBeanDefinitionParser("config-center", new DubboBeanDefinitionParser(ConfigCenterBean.class, true));
+      registerBeanDefinitionParser("metadata-report", new DubboBeanDefinitionParser(MetadataReportConfig.class, true));
+      registerBeanDefinitionParser("monitor", new DubboBeanDefinitionParser(MonitorConfig.class, true));
+      registerBeanDefinitionParser("metrics", new DubboBeanDefinitionParser(MetricsConfig.class, true));
+      registerBeanDefinitionParser("provider", new DubboBeanDefinitionParser(ProviderConfig.class, true));
+      registerBeanDefinitionParser("consumer", new DubboBeanDefinitionParser(ConsumerConfig.class, true));
+      registerBeanDefinitionParser("protocol", new DubboBeanDefinitionParser(ProtocolConfig.class, true));
+      // 一个dubbo:service标签 就对应一个ServiceBean对象，spring容器会去初始化它
+      registerBeanDefinitionParser("service", new DubboBeanDefinitionParser(ServiceBean.class, true));
+      registerBeanDefinitionParser("reference", new DubboBeanDefinitionParser(ReferenceBean.class, false));
+      registerBeanDefinitionParser("annotation", new AnnotationBeanDefinitionParser());
+  }
+  ```
+
+  在init方法中，当我们配置**<dubbo:service />**类似的标签时，spring会创建一个类型为**ServiceBean**的bean到spring容器(每一个dubbo:service标签对应一个ServiceBean类型的bean)。有了这个依据，我们可以把方向定位到**ServiceBean**类上了。
+
+
+
+
+
+
+
