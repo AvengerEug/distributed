@@ -528,7 +528,7 @@
 
 ### 5.1 以官网Demo dubbo-demo-xml 模块为例解析服务导出流程
 
-#### 5.1.1 Dubbo集成spring的第一个扩展点`NamespaceHandlerSupport`
+#### 5.1.1 Dubbo服务导出集成Spring的第一个扩展点`NamespaceHandlerSupport`
 
 * 以xml的格式来启动spring上下文，其中我们可以在xml中写如下类似的标签：
 
@@ -558,7 +558,148 @@
   }
   ```
 
-  在init方法中，当我们配置**<dubbo:service />**类似的标签时，spring会创建一个类型为**ServiceBean**的bean到spring容器(每一个dubbo:service标签对应一个ServiceBean类型的bean)。有了这个依据，我们可以把方向定位到**ServiceBean**类上了。
+  在init方法中，当我们配置**<dubbo:service />**类似的标签时，spring会创建一个类型为**ServiceBean**的bean到spring容器(每一个dubbo:service标签对应一个ServiceBean类型的bean)。有了这个依据，我们可以把方向定位到**ServiceBean**类上了(PS：除开ServiceBean之外，还有ReferenceBean也利用了spring的一些扩展点，当分析到ReferenceBean再详细总结)。
+
+#### 5.1.2 Dubbo服务导出集成Spring的第二个扩展点BeanPostProcessor
+
+* 先赞叹下Spring的BeanPostProcessor扩展点，它真的太牛逼了。可以对bean做**任何处理**，包括**代理**、**自定义填充属性**等等。其中如果这个bean是实现了不同Aware接口，都会进行回调。其中对于处理aware的入口为**ApplicationContextAwareProcessor**类，在此类的**postProcessBeforeInitialization**方法中会对各种aware做处理。换言之就是：我们可以通过**ApplicationContextAwareProcessor**类来获取spring上下文的许多东西，源码如下：
+
+  ```java
+  if (bean instanceof Aware) {
+      if (bean instanceof EnvironmentAware) {
+          ((EnvironmentAware) bean).setEnvironment(this.applicationContext.getEnvironment());
+      }
+      if (bean instanceof EmbeddedValueResolverAware) {
+          ((EmbeddedValueResolverAware) bean).setEmbeddedValueResolver(this.embeddedValueResolver);
+      }
+      if (bean instanceof ResourceLoaderAware) {
+          ((ResourceLoaderAware) bean).setResourceLoader(this.applicationContext);
+      }
+      if (bean instanceof ApplicationEventPublisherAware) {
+          ((ApplicationEventPublisherAware) bean).setApplicationEventPublisher(this.applicationContext);
+      }
+      if (bean instanceof MessageSourceAware) {
+          ((MessageSourceAware) bean).setMessageSource(this.applicationContext);
+      }
+      if (bean instanceof ApplicationContextAware) {
+          ((ApplicationContextAware) bean).setApplicationContext(this.applicationContext);
+      }
+  }
+  ```
+
+* 此扩展点的作用比较简单，就是为bean填充内部需要的相关aware接口。那**ServiceBean**来举例，ServiceBean主要实现了ApplicationContextAware和ApplicationEventPublisherAware接口，因此只是为了填充内部的**ApplicationEventPublisher**和**ApplicationContext**属性，仅此而已。
+
+#### 5.1.3 Dubbo服务导出集成Spring的第三个扩展点InitializingBean
+
+* 此扩展点在dubbo中就比较重要了，它是利用此扩展点来填充内部的一些配置属性的，比如我们在xml中配置的如下标签
+
+  ```xml
+  <dubbo:application name="demo-provider"/>
+  <dubbo:registry address="multicast://224.5.6.7:1234" />
+  <dubbo:protocol name="dubbo"/>
+  ```
+
+  最终都会通过此后置处理器将ServiceBean(拿ServiceBean举例)内部的一些**protocols、application、module、registries**等配置属性给填充。当然前提还是得配置好且被spring解析到。在Dubbo这些配置类中，都会存在一个叫ConfigManager的类中，此类为单例(**懒汉式**)，内部存放了当前dubbo应用程序的所有配置，其中包括共用的配置和每个服务私有的配置。
+
+#### 5.1.4 Dubbo服务导出集成Spring的第四个扩展点ApplicationListener<ContextRefreshedEvent>
+
+* 在ServiceBean中，它还实现了ApplicationListener<ContextRefreshedEvent>接口。这代表着这个类对spring的ContextRefreshedEvent事件感兴趣(详见org.springframework.context.support.AbstractApplicationContext#publishEvent(org.springframework.context.ApplicationEvent)方法，当spring容器初始化后，会发布ContextRefreshedEvent事件，此时就会通知所有订阅了此事件的监听者)。同时，在Dubbo服务暴露的开发者文档中也有提到，Dubbo服务暴露的核心就是Spring容器的刷新事件，如下为Dubbo官网的原话，[点此链接查看](http://dubbo.apache.org/zh-cn/docs/source_code_guide/export-service.html)：
+
+  ```txt
+  Dubbo 服务导出过程始于 Spring 容器发布刷新事件，Dubbo 在接收到事件后，会立即执行服务导出逻辑
+  ```
+
+* 官网中有说到，Dubbo的服务导出逻辑大致分为三个大部分：
+
+  ```txt
+  1、第一部分是前置工作，主要用于检查参数，组装 URL
+  2、第二部分是导出服务，包含导出服务到本地 (JVM)，和导出服务到远程两个过程
+  3、第三部分是向注册中心注册服务，用于服务发现
+  ```
+
+##### 5.1.4.1 前置条件
+
+* 这里引用下官网的原话：
+
+  > 前置工作主要包含两个部分，分别是配置检查和URL装配。在服务导出之前，Dubbo需要检查用户的配置是否合理，或者为用户补充缺省配置。配置检查完成后需要根据这些配置组装URL。在Dubbo中，URL的作用十分重要。Dubbo使用URL作为配置载体，所有的扩展点都是通过URL获取配置。
+
+###### 前置条件的第一步：检查配置
+
+* 第一个判断比较简单，服务导出的第一层条件为：**当前条件不处于导出状态**。直接看源码：
+
+  ```java
+  // org.apache.dubbo.config.spring.ServiceBean#onApplicationEvent
+  @Override
+  public void onApplicationEvent(ContextRefreshedEvent event) {
+      // 判断是否满足导出服务条件  => 服务未导出
+      if (!isExported() && !isUnexported()) {
+          if (logger.isInfoEnabled()) {
+              logger.info("The service ready on spring started. service: " + getInterface());
+          }
+          // 服务导出过程使用了责任链模式，一层一层的调用父类相同的方法，由每一个类专心处理自己的事
+          export();
+      }
+  }
+  ```
+
+  第一个条件验证通过后，直接调用export方法。
+
+* org.apache.dubbo.config.spring.ServiceBean#export源码
+
+  ```java
+  @Override
+  public void export() {
+      // 调用父类的export方法， 处于服务导出中三个阶段的第一个阶段：检查参数和组装URL
+      /**
+      * 检查参数
+      * @see ServiceConfig#checkAndUpdateSubConfigs()
+      * 组装URL
+      * @see ServiceConfig#doExport()
+      */
+      super.export();
+      // Publish ServiceBeanExportedEvent
+      publishExportEvent();
+  }
+  ```
+
+  此步骤为上述验证前置条件的入口，开始执行官网所说的两个步骤：**检查参数**和**组装URL**。在做这两件事的时候，使用了一种叫责任链的设计模式，通过调用抽象的方法，一层一层的往上调用，由父类来做一些前置条件。比如在此方法中，做前置条件的一些逻辑全部在父类(**ServiceConfig**)中处理了。
+
+###### 检查配置的第一步：**Dubbo需要检查用户的配置是否合理，或者为用户补充缺省配置**
+
+* 主要分为如下几个小步骤执行
+
+  > 1. 检测 <dubbo:service> 标签的 interface 属性合法性，不合法则抛出异常
+  > 2. 检测 ProviderConfig、ApplicationConfig 等核心配置类对象是否为空，若为空，则尝试从其他配置类对象中获取相应的实例。
+  > 3. 检测并处理泛化服务和普通服务类
+  > 4. 检测本地存根配置，并进行相应的处理
+  > 5. 对 ApplicationConfig、RegistryConfig 等配置类进行检测，为空则尝试创建，若无法创建则抛出异常
+
+###### 检查配置第二步：Dubbo根据上述的配置组装URL  -->  多协议
+
+* Dubbo 允许我们使用不同的协议导出服务，也允许我们向多个注册中心注册服务。源码如下：
+
+  ```java
+  private void doExportUrls() {
+      List<URL> registryURLs = loadRegistries(true);
+      for (ProtocolConfig protocolConfig : protocols) {
+          String pathKey = URL.buildKey(getContextPath(protocolConfig).map(p -> p + "/" + path).orElse(path), group, version);
+          ProviderModel providerModel = new ProviderModel(pathKey, ref, interfaceClass);
+          ApplicationModel.initProviderModel(pathKey, providerModel);
+          doExportUrlsFor1Protocol(protocolConfig, registryURLs);
+      }
+  }
+  ```
+
+  其中loadRegistries方法主要包含如下逻辑：
+
+  ```txt
+  1、检测是否存在注册中心配置类，不存在则抛出异常
+  2、构建参数映射集合，也就是 map
+  3、构建注册中心链接列表
+  4、遍历链接列表，并根据条件决定是否将其添加到 registryList 中
+  ```
+
+  
 
 
 
