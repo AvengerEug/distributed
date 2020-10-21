@@ -102,6 +102,26 @@
      ```
 
   6. 通过**ExtensionLoader.getExtensionLoader(UserService.class).getExtension("userService")**获取的UserService对象是被包装了三层的**UserServiceImpl**对象，最外面一层为: **UserServiceImplProxy2**, 其次为**UserServiceImplProxy1**, 最里面为自身**UserServiceImpl**。但要注意，如果我们要单独获取**UserServiceImplProxy1**对象时是获取不到的，因为dubbo只支持从**cachedClasses**属性中去找name，而只有实现类中无@Adaptive注解、无@Active注解、非包装类的情况下，它在spi配置的name才会被加载到**cachedClasses**中 ===> 白话理解就是：普通类才会添加到**cachedClasses**中去
+  
+  7. 这里澄清一个知识点：其实到底是哪个包装哪一个还不一定，在本例中是第三个包装第一个。其实这是不一定的。我们拿获取类型为**org.apache.dubbo.rpc.Protocol**的扩展，并且指定名字叫**injvm**，代码如下：
+  
+     ```java
+     // 在dubbo源码的dubbo-demo-xml的dubbo-demo-xml-provider子模块中，在spring启动后并执行如下代码
+     ExtensionLoader<Protocol> extensionLoader = 
+     ExtensionLoader.getExtensionLoader(Protocol.class);
+     Protocol injvm = extensionLoader.getExtension("injvm");
+     /**
+     dubbo源码的dubbo-demo-xml的dubbo-demo-xml-provider子模块中依赖了dubbo-rpc-dubbo模块，因此会加载此模块下的名字叫org.apache.dubbo.rpc.Protocol的扩展以及dubbo-rpc-api模块下名字叫org.apache.dubbo.rpc.Protocol的扩展。然后你会发现在dubbo-rpc-api模块下的org.apache.dubbo.rpc.Protocol文件中，指定了两个Wrapper，配置如下：
+     
+     filter=org.apache.dubbo.rpc.protocol.ProtocolFilterWrapper
+     listener=org.apache.dubbo.rpc.protocol.ProtocolListenerWrapper
+     
+     按照我们之前的认知，肯定是listener包装了filter，但实际上并不是，而是filter包装了listener。也就是说这个顺序是确定的。
+     原因就是在加载spi文件时，是将wrapper类缓存到ConcurrentHashSet中的, 而它底层用的是ConcurrentHashMap，因此它是无序的。所以存在set中的顺序取决于key的hash值
+     **/
+     ```
+  
+     
 
 ### 1.2 IOC
 
