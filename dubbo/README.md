@@ -719,7 +719,23 @@
   4、遍历链接列表，并根据条件决定是否将其添加到 registryList 中
   ```
 
-  
+  组装URL的详细过程可参考官网网站：[服务导出：2.1.3 组装 URL](http://dubbo.apache.org/zh-cn/docs/source_code_guide/export-service.html)。URL在Dubbo中非常重要，它是描述一个服务的元信息。我们来对比下，在java中，有Class对象来描述我们的每一个类的信息。在Spring中，有BeanDefinition对象来描述我们的每个bean的信息。在Duubo中，有URL来描述我们的每一个服务的信息。
+
+##### 5.1.4.2 导出服务
+
+* 官网描述：
+
+  ```txt
+  前置工作做完，接下来就是进行服务导出了。服务导出包括导出到本地JVM和导出到远程。
+  ```
+
+* 自己总结：
+
+  ```txt
+  其实前置工作做完了，那就是说针对当前指定服务的相关配置都组装好了以及它需要的URL对象也组装好了。这些相当于是导出的基本信息，可以把它比作spring创建bean之前的BeanDefinition。接下来就继续总结导出至JVM和导出到远程
+  ```
+
+###### 导出服务到本地
 
 
 
