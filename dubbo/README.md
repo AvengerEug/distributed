@@ -495,7 +495,7 @@
   > |  SpiExtensionFactory   | 根据传入的class，调用ExtensionLoadet.getExtension api来获取对象 | 内部获取的是对应Type的AdaptiveExtension类。要获取AdaptiveExtension类有两种渠道：<br>1、自己实现。自己在实现类中指定某个类为AdaptiveExtension(添加@Adaptive注解）<br>2、使用dubbo框架动态生成，接口中存在@Adaptive修饰的方法且方法参数为**org.apache.dubbo.common.URL** |
   > | SpringExtensionFactory |        根据传入的class和name，从spring容器中获取bean         |                      从spring中获取bean                      |
   >
-  > 总结：依赖注入的过程如果失败了，并不会影响整个过程，仅仅对应属性的值为null而已。
+  > **总结：依赖注入的过程如果失败了，并不会影响整个过程，仅仅对应属性的值为null而已。同时，在依赖注入时，会从SpiExtensionFactory和SpringExtensionFactory去找扩展，前者找的是adaptive类(自适应扩展类，即代理类)，后者找到的是spring的bean。因此，Dubbo的依赖注入支持从dubbo的spi机制中找对象，也支持从spring中找bean，所以我们可以在spi扩展类中，依赖注入spring中的bean(前提，必须需要获取对应扩展时，才会处理扩展。因为dubbo获取扩展机制采用的是懒汉式的模式)，方法就是使用set方法**
 
 ### 4.2 构建Wrapper类过程(AOP)
 
