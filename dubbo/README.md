@@ -530,7 +530,219 @@
   >
   > 2、对创建出来的Wrapper类进行依赖注入
 
-## 五、服务导出流程
+## 五、服务导出流程的前置知识点
+
+### 5.1 org.apache.dubbo.common.bytecode.Wrapper类包裹暴露服务的目标类
+
+* Wrapper类是一个抽象方法，在程序员不手动添加实现类的情况下，它只能通过getWrapper方法来动态生成实现类。其中动态生成的实现类具备如下功能：
+
+  ```txt
+  // 包含接口的详细信息
+  1、接口的字段信息
+  2、方法签名信息
+  ```
+
+* 假设拿官网的DemoService接口来做测试，我们为接口新增一个sayHello2方法，源码如下：
+
+  ```java
+  public interface DemoService {
+  
+      String sayHello(String name);
+  
+      String sayHello2(String name, String value);
+  
+  }
+  ```
+
+  在服务提供者项目启动完毕后，Dubbo会对每一个暴露的服务做一些封装，其中包括使用Wrapper来包裹我们的服务。在此处，我们暴露出来的服务为**org.apache.dubbo.demo.provider.DemoServiceImpl**，其中生成的Wrapper代理类名称叫**Wrapper1(在服务暴露的api(org.apache.dubbo.config.ServiceConfig#doExportUrlsFor1Protocol)中debug获取到的)**。我们使用**arthas**工具来对DemoServiceImpl的wrapper类来做反编译，发现结果如下：
+
+  ```java
+  package org.apache.dubbo.common.bytecode;
+  
+  import java.lang.reflect.InvocationTargetException;
+  import java.util.Map;
+  import org.apache.dubbo.common.bytecode.ClassGenerator;
+  import org.apache.dubbo.common.bytecode.NoSuchMethodException;
+  import org.apache.dubbo.common.bytecode.NoSuchPropertyException;
+  import org.apache.dubbo.common.bytecode.Wrapper;
+  import org.apache.dubbo.demo.provider.DemoServiceImpl;
+  
+  public class Wrapper1
+  extends Wrapper
+  implements ClassGenerator.DC {
+      public static String[] pns;
+      public static Map pts;
+      public static String[] mns;
+      public static String[] dmns;
+      public static Class[] mts0;
+      public static Class[] mts1;
+  
+      @Override
+      public String[] getPropertyNames() {
+          return pns;
+      }
+  
+      @Override
+      public boolean hasProperty(String string) {
+          return pts.containsKey(string);
+      }
+  
+      public Class getPropertyType(String string) {
+          return (Class)pts.get(string);
+      }
+  
+      @Override
+      public String[] getMethodNames() {
+          return mns;
+      }
+  
+      @Override
+      public String[] getDeclaredMethodNames() {
+          return dmns;
+      }
+  
+      @Override
+      public void setPropertyValue(Object object, String string, Object object2) {
+          try {
+              DemoServiceImpl demoServiceImpl = (DemoServiceImpl)object;
+          }
+          catch (Throwable throwable) {
+              throw new IllegalArgumentException(throwable);
+          }
+          throw new NoSuchPropertyException(new StringBuffer().append("Not found property \"").append(string).append("\" field or setter method in class org.apache.dubbo.demo.provider.DemoServiceImpl.").toString());
+      }
+  
+      @Override
+      public Object getPropertyValue(Object object, String string) {
+          try {
+              DemoServiceImpl demoServiceImpl = (DemoServiceImpl)object;
+          }
+          catch (Throwable throwable) {
+              throw new IllegalArgumentException(throwable);
+          }
+          throw new NoSuchPropertyException(new StringBuffer().append("Not found property \"").append(string).append("\" field or setter method in class org.apache.dubbo.demo.provider.DemoServiceImpl.").toString());
+      }
+  
+      public Object invokeMethod(Object object, String string, Class[] arrclass, Object[] arrobject) throws InvocationTargetException {
+          DemoServiceImpl demoServiceImpl;
+          try {
+              demoServiceImpl = (DemoServiceImpl)object;
+          }
+          catch (Throwable throwable) {
+              throw new IllegalArgumentException(throwable);
+          }
+          try {
+              if ("sayHello".equals(string) && arrclass.length == 1) {
+                  return demoServiceImpl.sayHello((String)arrobject[0]);
+              }
+              if ("sayHello2".equals(string) && arrclass.length == 2) {
+                  return demoServiceImpl.sayHello2((String)arrobject[0], (String)arrobject[1]);
+              }
+          }
+          catch (Throwable throwable) {
+              throw new InvocationTargetException(throwable);
+          }
+          throw new NoSuchMethodException(new StringBuffer().append("Not found method \"").append(string).append("\" in class org.apache.dubbo.demo.provider.DemoServiceImpl.").toString());
+      }
+  }
+  
+  ```
+
+### 5.2  ProxyFactory的自适应扩展类
+
+* 在Dubbo中，ProxyFactory的自适应扩展类是Dubbo动态生成的，其源码为：
+
+  ```java
+  package org.apache.dubbo.rpc;
+  
+  import org.apache.dubbo.common.URL;
+  import org.apache.dubbo.common.extension.ExtensionLoader;
+  import org.apache.dubbo.rpc.Invoker;
+  import org.apache.dubbo.rpc.ProxyFactory;
+  import org.apache.dubbo.rpc.RpcException;
+  
+  public class ProxyFactory$Adaptive
+  implements ProxyFactory {
+      public Object getProxy(Invoker invoker) throws RpcException {
+          if (invoker == null) {
+              throw new IllegalArgumentException("org.apache.dubbo.rpc.Invoker argument == null");
+          }
+          if (invoker.getUrl() == null) {
+              throw new IllegalArgumentException("org.apache.dubbo.rpc.Invoker argument getUrl() == null");
+          }
+          URL uRL = invoker.getUrl();
+          String string = uRL.getParameter("proxy", "javassist");
+          if (string == null) {
+              throw new IllegalStateException(new StringBuffer().append("Failed to get extension (org.apache.dubbo.rpc.ProxyFactory) name from url (").append(uRL.toString()).append(") use keys([proxy])").toString());
+          }
+          ProxyFactory proxyFactory = (ProxyFactory)ExtensionLoader.getExtensionLoader(ProxyFactory.class).getExtension(string);
+          return proxyFactory.getProxy(invoker);
+      }
+  
+      public Object getProxy(Invoker invoker, boolean bl) throws RpcException {
+          if (invoker == null) {
+              throw new IllegalArgumentException("org.apache.dubbo.rpc.Invoker argument == null");
+          }
+          if (invoker.getUrl() == null) {
+              throw new IllegalArgumentException("org.apache.dubbo.rpc.Invoker argument getUrl() == null");
+          }
+          URL uRL = invoker.getUrl();
+          String string = uRL.getParameter("proxy", "javassist");
+          if (string == null) {
+              throw new IllegalStateException(new StringBuffer().append("Failed to get extension (org.apache.dubbo.rpc.ProxyFactory) name from url (").append(uRL.toString()).append(") use keys([proxy])").toString());
+          }
+          ProxyFactory proxyFactory = (ProxyFactory)ExtensionLoader.getExtensionLoader(ProxyFactory.class).getExtension(string);
+          return proxyFactory.getProxy(invoker, bl);
+      }
+  
+      public Invoker getInvoker(Object object, Class class_, URL uRL) throws RpcException {
+          if (uRL == null) {
+              throw new IllegalArgumentException("url == null");
+          }
+          URL uRL2 = uRL;
+          String string = uRL2.getParameter("proxy", "javassist");
+          if (string == null) {
+              throw new IllegalStateException(new StringBuffer().append("Failed to get extension (org.apache.dubbo.rpc.ProxyFactory) name from url (").append(uRL2.toString()).append(") use keys([proxy])").toString());
+          }
+          ProxyFactory proxyFactory = (ProxyFactory)ExtensionLoader.getExtensionLoader(ProxyFactory.class).getExtension(string);
+          return proxyFactory.getInvoker(object, class_, uRL);
+      }
+  }
+  ```
+
+  其大致逻辑为：根据传入的url来动态获取ProxyFactory，其中默认从url中获取key为proxy的值，如果此值为空的话，则使用默认值"**javassist**"（参考**org.apache.dubbo.common.URL#getParameter(java.lang.String, java.lang.String)** api）。因此，我们定位到默认的情况：可以为**javassist**对应的类。
+
+  查看**org.apache.dubbo.rpc.ProxyFactory**的spi文件后，发现javassist对应的类为**org.apache.dubbo.rpc.proxy.javassist.JavassistProxyFactory**。
+
+  即默认情况下，ProxyFactory的扩展类就是**JavassistProxyFactory**
+
+### 5.3 org.apache.dubbo.rpc.proxy.javassist.JavassistProxyFactory#getInvoker api构建invoker对象
+
+* org.apache.dubbo.rpc.proxy.javassist.JavassistProxyFactory#getInvoker源码如下
+
+  ```java
+  public <T> Invoker<T> getInvoker(T proxy, Class<T> type, URL url) {
+      final Wrapper wrapper = Wrapper.getWrapper(proxy.getClass().getName().indexOf('$') < 0 ? proxy.getClass() : type);
+      return new AbstractProxyInvoker<T>(proxy, type, url) {
+          @Override
+          protected Object doInvoke(T proxy, String methodName,
+                                    Class<?>[] parameterTypes,
+                                    Object[] arguments) throws Throwable {
+              return wrapper.invokeMethod(proxy, methodName, parameterTypes, arguments);
+          }
+      };
+  }
+  ```
+
+  此 api返回的类型为Invoker。这里使用了模板方法的设计模式，利用抽象父类执行一些公用的逻辑，而内部的doInvoke方法逻辑则委托给Wrapper类的invokeMethod方法。因此，后续调用invoke的invoke方法时，内部的doInvoke方法将委托给Wrapper执行。
+
+### 总结
+
+* 针对于Wrapper和ProxyFactory以及Invoke而言：Dubbo会使用ProxyFactory的自适应扩展类来获取Invoke对象，同时Invoke对象内部包裹了暴露出服务的目
+
+  标类。因此他们的结构为如下所示：
+
+## 六、服务导出流程
 
 * 如官网所说：[服务导出流程](http://dubbo.apache.org/zh-cn/docs/source_code_guide/export-service.html)。服务导出一共分为两个部分
 
@@ -546,9 +758,9 @@
   >
   > 3、注册至注册中心：向注册中心注册服务，用于服务发现
 
-### 5.1 以官网Demo dubbo-demo-xml 模块为例解析服务导出流程
+### 6.1 以官网Demo dubbo-demo-xml 模块为例解析服务导出流程
 
-#### 5.1.1 Dubbo服务导出集成Spring的第一个扩展点`NamespaceHandlerSupport`
+#### 6.1.1 Dubbo服务导出集成Spring的第一个扩展点`NamespaceHandlerSupport`
 
 * 以xml的格式来启动spring上下文，其中我们可以在xml中写如下类似的标签：
 
@@ -580,7 +792,7 @@
 
   在init方法中，当我们配置**<dubbo:service />**类似的标签时，spring会创建一个类型为**ServiceBean**的bean到spring容器(每一个dubbo:service标签对应一个ServiceBean类型的bean)。有了这个依据，我们可以把方向定位到**ServiceBean**类上了(PS：除开ServiceBean之外，还有ReferenceBean也利用了spring的一些扩展点，当分析到ReferenceBean再详细总结)。
 
-#### 5.1.2 Dubbo服务导出集成Spring的第二个扩展点BeanPostProcessor
+#### 6.1.2 Dubbo服务导出集成Spring的第二个扩展点BeanPostProcessor
 
 * 先赞叹下Spring的BeanPostProcessor扩展点，它真的太牛逼了。可以对bean做**任何处理**，包括**代理**、**自定义填充属性**等等。其中如果这个bean是实现了不同Aware接口，都会进行回调。其中对于处理aware的入口为**ApplicationContextAwareProcessor**类，在此类的**postProcessBeforeInitialization**方法中会对各种aware做处理。换言之就是：我们可以通过**ApplicationContextAwareProcessor**类来获取spring上下文的许多东西，源码如下：
 
@@ -609,7 +821,7 @@
 
 * 此扩展点的作用比较简单，就是为bean填充内部需要的相关aware接口。那**ServiceBean**来举例，ServiceBean主要实现了ApplicationContextAware和ApplicationEventPublisherAware接口，因此只是为了填充内部的**ApplicationEventPublisher**和**ApplicationContext**属性，仅此而已。
 
-#### 5.1.3 Dubbo服务导出集成Spring的第三个扩展点InitializingBean
+#### 6.1.3 Dubbo服务导出集成Spring的第三个扩展点InitializingBean
 
 * 此扩展点在dubbo中就比较重要了，它是利用此扩展点来填充内部的一些配置属性的，比如我们在xml中配置的如下标签
 
@@ -621,7 +833,7 @@
 
   最终都会通过此后置处理器将ServiceBean(拿ServiceBean举例)内部的一些**protocols、application、module、registries**等配置属性给填充。当然前提还是得配置好且被spring解析到。在Dubbo这些配置类中，都会存在一个叫ConfigManager的类中，此类为单例(**懒汉式**)，内部存放了当前dubbo应用程序的所有配置，其中包括共用的配置和每个服务私有的配置。
 
-#### 5.1.4 Dubbo服务导出集成Spring的第四个扩展点ApplicationListener<ContextRefreshedEvent>
+#### 6.1.4 Dubbo服务导出集成Spring的第四个扩展点ApplicationListener<ContextRefreshedEvent>
 
 * 在ServiceBean中，它还实现了ApplicationListener<ContextRefreshedEvent>接口。这代表着这个类对spring的ContextRefreshedEvent事件感兴趣(详见org.springframework.context.support.AbstractApplicationContext#publishEvent(org.springframework.context.ApplicationEvent)方法，当spring容器初始化后，会发布ContextRefreshedEvent事件，此时就会通知所有订阅了此事件的监听者)。同时，在Dubbo服务暴露的开发者文档中也有提到，Dubbo服务暴露的核心就是Spring容器的刷新事件，如下为Dubbo官网的原话，[点此链接查看](http://dubbo.apache.org/zh-cn/docs/source_code_guide/export-service.html)：
 
@@ -637,7 +849,7 @@
   3、第三部分是向注册中心注册服务，用于服务发现
   ```
 
-##### 5.1.4.1 前置条件
+##### 6.1.4.1 前置条件
 
 * 这里引用下官网的原话：
 
@@ -721,7 +933,7 @@
 
   组装URL的详细过程可参考官网网站：[服务导出：2.1.3 组装 URL](http://dubbo.apache.org/zh-cn/docs/source_code_guide/export-service.html)。URL在Dubbo中非常重要，它是描述一个服务的元信息。我们来对比下，在java中，有Class对象来描述我们的每一个类的信息。在Spring中，有BeanDefinition对象来描述我们的每个bean的信息。在Duubo中，有URL来描述我们的每一个服务的信息。
 
-##### 5.1.4.2 导出服务
+##### 6.1.4.2 导出服务
 
 * 官网描述：
 
@@ -737,7 +949,90 @@
 
 ###### 导出服务到本地
 
+* 不管是什么样的导出协议，只要没有配置scope为**none**，那么都会将服务导出到本地。而这个导出服务到本地的操作主要参考如下代码：
 
+  ```java
+  // org.apache.dubbo.config.ServiceConfig#exportLocal
+  private void exportLocal(URL url) {
+      URL local = URLBuilder.from(url)
+          .setProtocol(LOCAL_PROTOCOL)
+          .setHost(LOCALHOST_VALUE)
+          .setPort(0)
+          .build();
+      Exporter<?> exporter = protocol.export(
+          PROXY_FACTORY.getInvoker(ref, (Class) interfaceClass, local));
+      exporters.add(exporter);
+      logger.info("Export dubbo service " + interfaceClass.getName() + " to local registry url : " + local);
+  }
+  ```
+
+  方法比较简单，主要做了三件事情：
+
+  1. 将传入的url转变成一个协议为**injvm**的url
+  2. 使用protocol的自适应扩展类根据url来获取具体的协议(此处是Injvm协议，但因为Protocol有包装类，因此获取的是Protocol的包装类)。但最终会调用到InjvmProtocol的export方法，在内部仅仅是返回了一个Exporter
+  3. 将第二步返回的Exporter保存到jvm级别的list中，完成本地服务的导出。
+
+###### 导出服务到远程
+
+* 导出服务到远程的主要操作源码如下：
+
+  ```java
+  // org.apache.dubbo.registry.integration.RegistryProtocol#export
+  @Override
+      public <T> Exporter<T> export(final Invoker<T> originInvoker) throws RpcException {
+          /**
+           * 获取注册中心的url
+           * 以zookeeper为例，得到的url如下
+           * zookeeper://127.0.0.1:2181/com.alibaba.dubbo.registry.RegistryService?application=demo-provider&dubbo=2.0.2&export=dubbo%3A%2F%2F172.17.48.52%3A20880%2Fcom.alibaba.dubbo.demo.DemoService%3Fanyhost%3Dtrue%26application%3Ddemo-provider
+           */
+          URL registryUrl = getRegistryUrl(originInvoker);
+  
+          // url to export locally ==> 获取导出到本地的url
+          URL providerUrl = getProviderUrl(originInvoker);
+  
+          // 获取订阅 URL，比如：
+          // provider://172.17.48.52:20880/com.alibaba.dubbo.demo.DemoService?category=configurators&check=false&anyhost=true&application=demo-provider&dubbo=2.0.2&generic=false&interface=com.alibaba.dubbo.demo.DemoService&methods=sayHello
+          final URL overrideSubscribeUrl = getSubscribedOverrideUrl(providerUrl);
+          // 创建监听器
+          final OverrideListener overrideSubscribeListener = new OverrideListener(overrideSubscribeUrl, originInvoker);
+          overrideListeners.put(overrideSubscribeUrl, overrideSubscribeListener);
+  
+          providerUrl = overrideUrlWithConfig(providerUrl, overrideSubscribeListener);
+          //export invoker
+          final ExporterChangeableWrapper<T> exporter = doLocalExport(originInvoker, providerUrl);
+  
+          // url to registry
+          final Registry registry = getRegistry(originInvoker);
+          final URL registeredProviderUrl = getRegisteredProviderUrl(providerUrl, registryUrl);
+          ProviderInvokerWrapper<T> providerInvokerWrapper = ProviderConsumerRegTable.registerProvider(originInvoker,
+                  registryUrl, registeredProviderUrl);
+          //to judge if we need to delay publish
+          boolean register = registeredProviderUrl.getParameter("register", true);
+          if (register) {
+              register(registryUrl, registeredProviderUrl);
+              providerInvokerWrapper.setReg(true);
+          }
+  
+          // Deprecated! Subscribe to override rules in 2.6.x or before.
+          registry.subscribe(overrideSubscribeUrl, overrideSubscribeListener);
+  
+          exporter.setRegisterUrl(registeredProviderUrl);
+          exporter.setSubscribeUrl(overrideSubscribeUrl);
+          //Ensure that a new exporter instance is returned every time export
+          return new DestroyableExporter<>(exporter);
+      }
+  ```
+
+  主要做了如下几件事情：
+
+  ```txt
+  1、调用doLocalExporter导出服务
+  2、向注册中心注册服务
+  3、向注册中心订阅override数据
+  4、创建并返回DestroyableExporter
+  ```
+
+  
 
 
 
