@@ -741,6 +741,8 @@
 * 针对于Wrapper和ProxyFactory以及Invoke而言：Dubbo会使用ProxyFactory的自适应扩展类来获取Invoke对象，同时Invoke对象内部包裹了暴露出服务的目
 
   标类。因此他们的结构为如下所示：
+  
+  ![8.png](./8.png)
 
 ## 六、服务导出流程
 
