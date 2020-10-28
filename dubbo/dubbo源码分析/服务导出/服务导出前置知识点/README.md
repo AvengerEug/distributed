@@ -10,7 +10,7 @@
   3、org.apache.dubbo.rpc.proxy.javassist.JavassistProxyFactory
   ```
 
-  废话不多说，咱们开始**前置知识**的学习(基于Dubbo源码2.7.3版本)。
+  废话不多说，咱们开始**前置知识**的学习(基于Dubbo源码2.7.3版本，可参考Dubbo系列的[此篇文章](https://blog.csdn.net/avengerEug/article/details/105326594)进行工程的clone)。
 
 ## 一、org.apache.dubbo.common.bytecode.Wrapper类的作用
 
@@ -44,7 +44,7 @@
 
 * 分析测试用例中使用**I1**的Wrapper对象来动态的调用I1实现类的指定方法
 
-  ![compare2.png](./compare.png)
+  ![compare2.png](./compare2.png)
 
 ### 1.4 总结
 
@@ -84,11 +84,29 @@
 
 * ![JavassistProxyFactorySource.png](./JavassistProxyFactorySource.png)
 
-### 2.5 总结
+  有一个注意点：**通过JavassistProxyFactory类获取的invoker对象是AbstractProxyInvoker的匿名内部类（这里采用了`模板方法`的设计模式，将invoke方法通用逻辑放在抽象类中，而invoke内部的doInvoke逻辑则交由子类实现）。因此，我们后续调用JavassistProxyFactory类创建的invoker对象的invoke方法时，最终会调用到AbstractProxyInvoker抽象类的invoke方法，然后内部的invoke逻辑则委托给Wrapper来调用**
 
-* 由上可知，在缺省情况下， Dubbo的ProxyFactory的自适应扩展类的getInvoker方法最终获取的一个匿名内部类，并且匿名内部类的doInvoke逻辑将委托给新
+### 2.5  Dubbo源码工程测试用例：org.apache.dubbo.rpc.proxy.AbstractProxyTest#testGetInvoker
 
-  生成的Wrapper类来执行。而getProxy方法就是为传入的对象生成一个代理对象。
+* 源码如下所示：
+
+  ![testGetInvoker.png](./testGetInvoker.png)
+
+* 当我们调用**invoker.invoke(new RpcInvocation("echo", new Class[]{String.class}, new Object[]{"aa"}))**方法时，由上章节可知，invoker对象就是
+
+  **AbstractProxyInvoker**的匿名内部类。因此，此时肯定调用的是**AbstractProxyInvoker**的**invoke方法**。
+
+  其调用链如下所示：
+
+  ![调用顺序.png](./调用顺序.png)
+
+### 2.6 总结
+
+* 由上可知，在缺省情况下， Dubbo的ProxyFactory的自适应扩展类的getInvoker方法最终获取的是一个匿名内部类，并且匿名内部类的doInvoke逻辑将委托给
+
+  新生成的Wrapper类来执行。而getProxy方法就是为传入的对象生成一个代理对象。
+
+  其中，**invoker对象的调用需要传入一个Invocation对象，在Invocation对象中指定了在委托给Wrapper对象执行doInvoker逻辑时的指定方法、指定参数类型、指定参数值**
 
 ## 三、总结
 
@@ -97,6 +115,18 @@
   务引入的源码中会经常看到ProxyFactory的自适应扩展类以及Wrapper来包装一个服务的代码。因此，在这特意做一下总结，方便后续服务导出和服务引入源
 
   码的阅读。
+
+* 再次总结下：
+
+  ```txt
+  1、在默认情况下，我们都是通过JavassistProxyFactory获取Invoker对象，它返回的是AbstractProxyFactory的匿名内部类，内部的doInvoker方法将委托给Wrapper类来执行。
+  2、当我们要调用invoker对象的invoke方法时，需要传递一个Invocation对象，其中要指定调用内部Wrapper对象的方法名、参数类型、参数值
+  3、Wrapper类是一个有接口的描类。我们可以通过wrapper类调用它内部指定方法，也可以通过它来调用不同实现类的方法。
+  ```
+
+  一般情况下：invoker会和wrapper类结合使用，在**服务暴露**和**服务引入**时他们会经常出现，而且他们一定的关联关系，服务暴露来说，他们具有如下关系(**看不懂没关系，将在服务暴露过程中详细解释**)：
+
+  ![invoker和wrapper的关系.png](./invoker和wrapper的关系.png)
 
 * **I'm a slow walker, but I never walk backwards**
 
