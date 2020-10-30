@@ -792,31 +792,33 @@
   }
   ```
 
-  在init方法中，当我们配置**<dubbo:service />**类似的标签时，spring会创建一个类型为**ServiceBean**的bean到spring容器(每一个dubbo:service标签对应一个ServiceBean类型的bean)。有了这个依据，我们可以把方向定位到**ServiceBean**类上了(PS：除开ServiceBean之外，还有ReferenceBean也利用了spring的一些扩展点，当分析到ReferenceBean再详细总结)。
+  在init方法中，当我们配置**<dubbo:service />**类似的标签时，spring会解析我们的配置并为对应的类型创建BeanDefinition。(**每一个dubbo:service标签对应一个ServiceBean类型的BeanDefinition**)。有了这个依据，我们可以把方向定位到**ServiceBean**类上了(PS：除开ServiceBean之外，还有ReferenceBean也利用了spring的一些扩展点，当分析到ReferenceBean再详细总结)。
 
 #### 6.1.2 Dubbo服务导出集成Spring的第二个扩展点BeanPostProcessor
 
 * 先赞叹下Spring的BeanPostProcessor扩展点，它真的太牛逼了。可以对bean做**任何处理**，包括**代理**、**自定义填充属性**等等。其中如果这个bean是实现了不同Aware接口，都会进行回调。其中对于处理aware的入口为**ApplicationContextAwareProcessor**类，在此类的**postProcessBeforeInitialization**方法中会对各种aware做处理。换言之就是：我们可以通过**ApplicationContextAwareProcessor**类来获取spring上下文的许多东西，源码如下：
 
   ```java
-  if (bean instanceof Aware) {
-      if (bean instanceof EnvironmentAware) {
-          ((EnvironmentAware) bean).setEnvironment(this.applicationContext.getEnvironment());
-      }
-      if (bean instanceof EmbeddedValueResolverAware) {
-          ((EmbeddedValueResolverAware) bean).setEmbeddedValueResolver(this.embeddedValueResolver);
-      }
-      if (bean instanceof ResourceLoaderAware) {
-          ((ResourceLoaderAware) bean).setResourceLoader(this.applicationContext);
-      }
-      if (bean instanceof ApplicationEventPublisherAware) {
-          ((ApplicationEventPublisherAware) bean).setApplicationEventPublisher(this.applicationContext);
-      }
-      if (bean instanceof MessageSourceAware) {
-          ((MessageSourceAware) bean).setMessageSource(this.applicationContext);
-      }
-      if (bean instanceof ApplicationContextAware) {
-          ((ApplicationContextAware) bean).setApplicationContext(this.applicationContext);
+  private void invokeAwareInterfaces(Object bean) {
+      if (bean instanceof Aware) {
+          if (bean instanceof EnvironmentAware) {
+              ((EnvironmentAware) bean).setEnvironment(this.applicationContext.getEnvironment());
+          }
+          if (bean instanceof EmbeddedValueResolverAware) {
+              ((EmbeddedValueResolverAware) bean).setEmbeddedValueResolver(this.embeddedValueResolver);
+          }
+          if (bean instanceof ResourceLoaderAware) {
+              ((ResourceLoaderAware) bean).setResourceLoader(this.applicationContext);
+          }
+          if (bean instanceof ApplicationEventPublisherAware) {
+              ((ApplicationEventPublisherAware) bean).setApplicationEventPublisher(this.applicationContext);
+          }
+          if (bean instanceof MessageSourceAware) {
+              ((MessageSourceAware) bean).setMessageSource(this.applicationContext);
+          }
+          if (bean instanceof ApplicationContextAware) {
+              ((ApplicationContextAware) bean).setApplicationContext(this.applicationContext);
+          }
       }
   }
   ```
@@ -825,15 +827,15 @@
 
 #### 6.1.3 Dubbo服务导出集成Spring的第三个扩展点InitializingBean
 
-* 此扩展点在dubbo中就比较重要了，它是利用此扩展点来填充内部的一些配置属性的，比如我们在xml中配置的如下标签
+* 此扩展点在dubbo中就比较重要了，它是利用此扩展点来填充额外的一些配置，比如我们在xml中配置的如下标签
 
   ```xml
   <dubbo:application name="demo-provider"/>
-  <dubbo:registry address="multicast://224.5.6.7:1234" />
+  <dubbo:registry address="zookeeper://127.0.0.1:2181" />
   <dubbo:protocol name="dubbo"/>
   ```
 
-  最终都会通过此后置处理器将ServiceBean(拿ServiceBean举例)内部的一些**protocols、application、module、registries**等配置属性给填充。当然前提还是得配置好且被spring解析到。在Dubbo这些配置类中，都会存在一个叫ConfigManager的类中，此类为单例(**懒汉式**)，内部存放了当前dubbo应用程序的所有配置，其中包括共用的配置和每个服务私有的配置。
+  最终都会通过此后置处理器将ServiceBean(拿ServiceBean举例)内部的一些**protocols、application、module、registries**等配置属性给填充，相当于把当前服务与其他共享的配置给关联起来，进而知道当前服务属于哪个应用程序、共用哪些协议。当然前提还是得配置好且被spring解析到。在Dubbo这些配置类中，都会存在一个叫ConfigManager的类中，此类为单例(**懒汉式**)，内部存放了当前dubbo应用程序的所有配置，其中包括共用的配置和每个服务私有的配置。
 
 #### 6.1.4 Dubbo服务导出集成Spring的第四个扩展点ApplicationListener<ContextRefreshedEvent>
 
@@ -976,63 +978,77 @@
 
 ###### 导出服务到远程
 
+* 导出服务到远程包含两个步骤
+
+  ```txt
+  1、向注册中心注册服务
+  2、导出服务
+  ```
+
 * 导出服务到远程的主要操作源码如下：
 
   ```java
   // org.apache.dubbo.registry.integration.RegistryProtocol#export
   @Override
-      public <T> Exporter<T> export(final Invoker<T> originInvoker) throws RpcException {
-          /**
-           * 获取注册中心的url
-           * 以zookeeper为例，得到的url如下
-           * zookeeper://127.0.0.1:2181/com.alibaba.dubbo.registry.RegistryService?application=demo-provider&dubbo=2.0.2&export=dubbo%3A%2F%2F172.17.48.52%3A20880%2Fcom.alibaba.dubbo.demo.DemoService%3Fanyhost%3Dtrue%26application%3Ddemo-provider
-           */
-          URL registryUrl = getRegistryUrl(originInvoker);
+  public <T> Exporter<T> export(final Invoker<T> originInvoker) throws RpcException {
+      /**
+       * 获取注册中心的url
+       * 以zookeeper为例，得到的url如下
+       * zookeeper://127.0.0.1:2181/com.alibaba.dubbo.registry.RegistryService?application=demo-provider&dubbo=2.0.2&export=dubbo%3A%2F%2F172.17.48.52%3A20880%2Fcom.alibaba.dubbo.demo.DemoService%3Fanyhost%3Dtrue%26application%3Ddemo-provider
+       */
+      URL registryUrl = getRegistryUrl(originInvoker);
   
-          // url to export locally ==> 获取导出到本地的url
-          URL providerUrl = getProviderUrl(originInvoker);
+      // url to export locally ==> 获取导出到本地的url
+      URL providerUrl = getProviderUrl(originInvoker);
   
-          // 获取订阅 URL，比如：
-          // provider://172.17.48.52:20880/com.alibaba.dubbo.demo.DemoService?category=configurators&check=false&anyhost=true&application=demo-provider&dubbo=2.0.2&generic=false&interface=com.alibaba.dubbo.demo.DemoService&methods=sayHello
-          final URL overrideSubscribeUrl = getSubscribedOverrideUrl(providerUrl);
-          // 创建监听器
-          final OverrideListener overrideSubscribeListener = new OverrideListener(overrideSubscribeUrl, originInvoker);
-          overrideListeners.put(overrideSubscribeUrl, overrideSubscribeListener);
+      // 获取订阅 URL，比如：
+      // provider://172.17.48.52:20880/com.alibaba.dubbo.demo.DemoService?category=configurators&check=false&anyhost=true&application=demo-provider&dubbo=2.0.2&generic=false&interface=com.alibaba.dubbo.demo.DemoService&methods=sayHello
+      final URL overrideSubscribeUrl = getSubscribedOverrideUrl(providerUrl);
+      // 创建监听器
+      final OverrideListener overrideSubscribeListener = new OverrideListener(overrideSubscribeUrl, originInvoker);
+      overrideListeners.put(overrideSubscribeUrl, overrideSubscribeListener);
   
-          providerUrl = overrideUrlWithConfig(providerUrl, overrideSubscribeListener);
-          //export invoker
-          final ExporterChangeableWrapper<T> exporter = doLocalExport(originInvoker, providerUrl);
+      providerUrl = overrideUrlWithConfig(providerUrl, overrideSubscribeListener);
+      // 导出服务
+      final ExporterChangeableWrapper<T> exporter = doLocalExport(originInvoker, providerUrl);
   
-          // url to registry
-          final Registry registry = getRegistry(originInvoker);
-          final URL registeredProviderUrl = getRegisteredProviderUrl(providerUrl, registryUrl);
-          ProviderInvokerWrapper<T> providerInvokerWrapper = ProviderConsumerRegTable.registerProvider(originInvoker,
-                  registryUrl, registeredProviderUrl);
-          //to judge if we need to delay publish
-          boolean register = registeredProviderUrl.getParameter("register", true);
-          if (register) {
-              register(registryUrl, registeredProviderUrl);
-              providerInvokerWrapper.setReg(true);
-          }
-  
-          // Deprecated! Subscribe to override rules in 2.6.x or before.
-          registry.subscribe(overrideSubscribeUrl, overrideSubscribeListener);
-  
-          exporter.setRegisterUrl(registeredProviderUrl);
-          exporter.setSubscribeUrl(overrideSubscribeUrl);
-          //Ensure that a new exporter instance is returned every time export
-          return new DestroyableExporter<>(exporter);
+      // url to registry
+      final Registry registry = getRegistry(originInvoker);
+      final URL registeredProviderUrl = getRegisteredProviderUrl(providerUrl, registryUrl);
+      ProviderInvokerWrapper<T> providerInvokerWrapper = ProviderConsumerRegTable.registerProvider(originInvoker,
+                                                                                                   registryUrl, registeredProviderUrl);
+      //to judge if we need to delay publish
+      boolean register = registeredProviderUrl.getParameter("register", true);
+      if (register) {
+          // 将服务注册到注册中心
+          register(registryUrl, registeredProviderUrl);
+          providerInvokerWrapper.setReg(true);
       }
-  ```
-
-  主要做了如下几件事情：
-
+  
+      // Deprecated! Subscribe to override rules in 2.6.x or before.
+      registry.subscribe(overrideSubscribeUrl, overrideSubscribeListener);
+  
+      exporter.setRegisterUrl(registeredProviderUrl);
+      exporter.setSubscribeUrl(overrideSubscribeUrl);
+      //Ensure that a new exporter instance is returned every time export
+      return new DestroyableExporter<>(exporter);
+  }
+```
+  
+主要做了如下几件事情：
+  
   ```txt
   1、调用doLocalExporter导出服务
   2、向注册中心注册服务
   3、向注册中心订阅override数据
   4、创建并返回DestroyableExporter
-  ```
+```
+  
+* 导出服务对应的invoker对象的源码：
+
+  类似于Dubbo源码工程的测试用例(**org.apache.dubbo.rpc.proxy.AbstractProxyTest#testGetInvoker**)，默认情况下获取的都是AbstractProxyInvoker的匿名内部类，其内部维护了当前服务的Wrapper对象，最终AbstractProxyyInvoker对象内部的invoke方法的doInvoke方法将委托给Wrapper类来执行。
+
+  
 
   
 
