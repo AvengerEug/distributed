@@ -245,6 +245,9 @@
 
 * 读在这里的你，是否应该明白了Dubbo的自适应扩展机制了。它主要的目的就是**根据URL参数来动态从ExtensionLoader获取指定的扩展，并调用指定扩展的指定方法**，这样的设计扩展性比较高。同时，它还支持像ExtensionFactory类型的扩展，由程序员自己指定自适应扩展类而不需要Dubbo来生成。
 * 自适应扩展机制很重要，后续的源代码中将会经常看到它。
+
+* **如果你觉得我的文章有用的话，欢迎点赞和关注。:laughing:**
+
 * **I'm a slow walker, but I never walk backwards**
 
 

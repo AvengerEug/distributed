@@ -1,6 +1,6 @@
 ## 前言
 
-* [上篇文章: Dubbo2.7.3版本源码学习系列五: 学习Dubbo服务导出源码前置知识点(ProxyFactory和Wrapper类)](https://blog.csdn.net/avengerEug/article/details/109340657)，咱们了解了Dubbo的ProxyFactory和Wrapper类的作用。本篇文章，咱们开始进入Dubbo服务导出的源码解读，在这个环节，咱们会用到上篇文章所总结到的知识点。
+* [上篇文章: Dubbo2.7.3版本源码学习系列五: 学习Dubbo服务导出源码前置知识点(ProxyFactory和Wrapper类)](https://blog.csdn.net/avengerEug/article/details/109340657)，咱们了解了Dubbo的ProxyFactory和Wrapper类的作用。本篇文章，咱们开始进入Dubbo服务导出的源码解读，在这个环节，咱们会用到之前Dubbo系列总结到的知识点(**自适应扩展类、Wrapper、ProxyFactory**)。
 
 ## 一、官网对服务导出的简介
 
@@ -16,7 +16,7 @@
 
 ## 二、前置工作：检查参数、组装URL
 
-* 在Dubbo做**前置工作(检查参数、组装URL)**之前，Dubbo得先把当前服务对应的一些配置从配置文件或Spring 配置类中解析出来，其次才是执行所谓的前置工作。在这一个个过程中，用到了spring的许多过程点，在这里，我将用到的spring扩展点及其作用都一一罗列出来。
+* 在Dubbo做**前置工作(检查参数、组装URL)**之前，Dubbo得先把当前服务对应的一些配置从配置文件或Spring 配置类中解析出来，其次才是执行所谓的前置工作。在这一个个过程中，用到了spring的许多过程点，在这里，我将用到的spring扩展点及其作用都一一罗列了出来。
 
 ### 2.1 Dubbo服务导出集成Spring的第一个扩展点`NamespaceHandlerSupport`(针对xml而言)
 
@@ -197,4 +197,10 @@
   ![zookeeperRegister.png](./zookeeperRegister.png)
 
 * 服务注册流程比较简单了，就是自适应扩展类registryFactory根据url中的protocol属性来决定使用哪个注册中心来完成服务注册。
+
+## 五、总结
+
+* 整个服务导出路程是严格按照官网的流程来进行总结的，把官方没有描述的一些技术给完善了。要了解服务导出的底层原理，首先得把**自适应扩展机制、ProxyFactory、Wrapper类搞明白**，还有个最重要的是要时刻关注**URL**的变化，因为很多自适应扩展机制的代码，代码没有变，但因为url的某个参数发生了变化，就变成另外一个类来执行逻辑了。
+* **如果你觉得我的文章有用的话，欢迎点赞和关注。:laughing:**
+* **I'm a slow walker, but I never walk backwards**
 

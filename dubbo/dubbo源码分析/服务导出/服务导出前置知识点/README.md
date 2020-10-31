@@ -128,6 +128,8 @@
 
   ![invoker和wrapper的关系.png](./invoker和wrapper的关系.png)
 
+* **如果你觉得我的文章有用的话，欢迎点赞和关注。:laughing:**
+
 * **I'm a slow walker, but I never walk backwards**
 
 
