@@ -90,7 +90,7 @@
 
   ![onApplicationEvent](./onApplicationEvent.png)
 
-  **PS：Dubbo中使用了大量的责任链设计模式，可以提前了解下它，否则在阅读的过程中会遇到一些困难**
+  **PS：Dubbo中使用了大量的责任链设计模式，`可以提前了解下它`，否则在阅读源码的过程中会遇到一些困难**
 
 #### 2.5.1 前置条件的第一步：检查配置
 
@@ -118,36 +118,83 @@
   > URL 是 Dubbo 配置的载体，通过 URL 可让 Dubbo 的各种配置在各个模块之间传递。URL 之于 Dubbo，犹如水之于鱼，非常重要。
   > ```
 
-  官网都给咱们开后门了，就差压着咱们学习URL了，还不加紧把URL整明白？
+  **官网都给咱们开后门了，就差压着咱们学习URL了，还不加紧把URL整明白？**
 
 ## 三、导出服务
 
-### 3.1  导出的服务生成Invoker对象，完成服务导出
+### 3.1  为导出的服务构建Invoker对象
 
 * URL组装好了之后，咱们就可以大胆的将服务导出了。
-* 服务导出的代码还是在**doExportUrlsFor1Protocol**方法中，导出服务包含两个：**本地导出**和**远程导出**。
 
-* 在本例中，需要注册的url只有一个，就是咱们配置的registry标签。
+* 为导出的服务构建Invoker对象的代码还是在**doExportUrlsFor1Protocol**方法中，导出服务包含两个：**本地导出**和**远程导出**。
+
+* 在本例中，我们配置的注册中心只有一个，就是咱们配置的registry标签。
 
   ```xml
   <dubbo:registry address="zookeeper://127.0.0.1:2181" />
   ```
 
-  其中它被Dubbo翻译成URL的模样为：
+  因此，当前服务需要被注册到注册中心的URL将被解析成如下模样：
 
   ![registryUrl](./registryUrl.png)
 
 * 为上述配置的服务生成Invoker对象
 
   ![exportRemote](./exportRemote.png)
+  
+  这里我们要注意下：构建Invoker对象时，传入进去的URL并不是我们最开始构建的URL(描述当前服务的URL)，而是根据注册中心配置的URL，那么我们之前构建的URL有什么用呢？有用的，我们可以在构建Invoker对象时看到，url最终会变成一个字符串(`url.toFullString()`)添加到**registruURL**中去，也就是说，Invoker中的URL，主体是当前遍历的协议的内容，只不过内部加了一个叫key为**EXPORT_KEY(export)**的参数，其中value为当前暴露出服务的整个URL(即最开始组装的URL)。如下图所示(`registryURL.addParameterAndEncoded(EXPORT_KEY, url.toFullString())`代码的执行结果)：
+  
+  ![registry协议中携带的export参数.png](./registry协议中携带的export参数.png)
+  
+  因此，我们应该能大概明白invoker对象中url属性的结构了。
 
 ### 3.2 RegistryProtocol作为导出服务到远程的入口
 
-* 
+* 同样的，服务导出的入口也在**doExportUrlsFor1Protocol**方法中，其源码如下：
+
+  ![exporService.png](./exporService.png)
+
+  由注释中的分析可知，咱们把视角挪到**org.apache.dubbo.registry.integration.RegistryProtocol#export**
+
+  ![registryProtocolExport](./registryProtocolExport.png)
+
+  由上述的源码注释可知：RegistryProtocol的export方法中主要做了两件事情：
+
+  ```txt
+  1、利用服务导出的URL进行导出服务
+  2、向注册中心注册服务
+  ```
 
 ### 3.3  根据服务提供者的配置执行真实的服务导出逻辑
 
-## 四、注册服务
+* 真实的服务导出逻辑，我们把代码定位到：**org.apache.dubbo.registry.integration.RegistryProtocol#doLocalExport**，其源码如下：
 
+  ![dubboProtocolDoLocalExport](./dubboProtocolDoLocalExport.png)
 
+  正如上述源码中的注释所示，我们忽略Protocol的Wrapper类，直接把代码定位到DubboProtocl的export方法
+
+* **org.apache.dubbo.rpc.protocol.dubbo.DubboProtocol#export**源码如下：
+
+  ![dubboProtocolExport.png](./dubboProtocolExport.png)
+
+  真实的导出逻辑比较简单，就是开启了一个netty服务器以及为invoker构建了一个export对象。此段逻辑执行结束后，咱们再把目光放到**org.apache.dubbo.registry.integration.RegistryProtocol#export**处，我们最开始是从**org.apache.dubbo.registry.integration.RegistryProtocol#export**内部的**doLocalExport**方法进入，完成服务导出逻辑，并返回一个ExporterChangeableWrapper对象。
+
+### 3.4  导出服务总结
+
+* 内容比较简单，主要做了如下两件事：
+  1. 为导出的服务构建invoker对象，此invoker对象比较特殊，以注册中心的url为主体，描述服务的url将作为参数保存在invoker中。
+  2. 解析invoker对象，拿到注册中心的url以及描述服务的url，再针对描述服务的url来执行真正的服务导出逻辑(走具体的服务导出协议，以及开启对应的服务器)
+* 按照官网的流程来说的话，服务导出结束了，剩下的就是**服务注册**流程了
+
+## 四、服务注册
+
+* 服务注册的流程咱们继续接着**org.apache.dubbo.registry.integration.RegistryProtocol#export**进行分析，其源码如下：
+
+  ![registryService](./registryService.png)
+
+  在注册服务的过程中，最终会调用register方法，其内部的代码大家看了之后应该就能明白了：
+
+  ![zookeeperRegister.png](./zookeeperRegister.png)
+
+* 服务注册流程比较简单了，就是自适应扩展类registryFactory根据url中的protocol属性来决定使用哪个注册中心来完成服务注册。
 
