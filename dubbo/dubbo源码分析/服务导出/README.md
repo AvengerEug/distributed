@@ -4,6 +4,8 @@
 
 ## 一、官网对服务导出的简介
 
+* 官网描述
+
 > Dubbo 服务导出过程始于 Spring 容器发布刷新事件，Dubbo 在接收到事件后，会立即执行服务导出逻辑。整个逻辑大致可分为三个部分，第一部分是前置工作，主要用于检查参数，组装 URL。第二部分是导出服务，包含导出服务到本地 (JVM)，和导出服务到远程两个过程。第三部分是向注册中心注册服务，用于服务发现。
 
 * 通过官网的描述，咱们可以知道服务导出的源码开始于Spring的刷新事件(这里对Spring容器刷新事件不太了解的，可以参考此篇文章[spring 5.0.x源码学习系列十: 观察者设计模式与Spring 事件驱动模型](https://blog.csdn.net/avengerEug/article/details/104250613))。Dubbo在进行服务导出时，会做三个步骤：
@@ -64,11 +66,11 @@
 
   最终都会通过此后置处理器将ServiceBean(拿ServiceBean举例)内部的一些**protocols、application、module、registries**等配置属性给填充，相当于把当前服务与其他共享的配置给关联起来，进而知道当前服务属于哪个应用程序、共用哪些协议。当然前提还是得配置好且被spring解析到。在Dubbo这些配置类中，都会存在一个叫ConfigManager的类中，此类为单例(**懒汉式**)，内部存放了当前dubbo应用程序的所有配置，其中包括共用的配置和每个服务私有的配置。
 
-* 因此，通过Spring的InitializingBean扩展点，我们可以将当前暴露的服务与其他配置相关联，比如当前暴露出去的服务支持哪些协议、使用哪个注册中心、属于哪个应用程序。
+* 因此，通过Spring的InitializingBean扩展点，我们可以将当前暴露的服务与其他配置相关联，**比如当前暴露出去的服务支持哪些协议、使用哪个注册中心、属于哪个应用程序**。
 
 ### 2.4 Dubbo服务导出集成Spring的第四个扩展点ApplicationListener<ContextRefreshedEvent>
 
-* 在ServiceBean中，它还实现了ApplicationListener<ContextRefreshedEvent>接口。这代表着这个类对spring的ContextRefreshedEvent事件感兴趣(详见org.springframework.context.support.AbstractApplicationContext#publishEvent(org.springframework.context.ApplicationEvent)方法，当spring容器初始化后，会发布ContextRefreshedEvent事件，此时就会通知所有订阅了此事件的监听者)。同时，在Dubbo服务暴露的开发者文档中也有提到，Dubbo服务暴露的核心就是Spring容器的刷新事件，如下为Dubbo官网的原话，[点此链接查看](http://dubbo.apache.org/zh-cn/docs/source_code_guide/export-service.html)：
+* 在ServiceBean中，它还实现了ApplicationListener<ContextRefreshedEvent>接口。这代表着这个类对spring的ContextRefreshedEvent事件感兴趣(详见`org.springframework.context.support.AbstractApplicationContext#publishEvent(org.springframework.context.ApplicationEvent`)方法，当spring容器初始化后，会发布ContextRefreshedEvent事件，此时就会通知所有订阅了此事件的监听者)。同时，在Dubbo服务暴露的开发者文档中也有提到，Dubbo服务暴露的核心就是Spring容器的刷新事件，如下为Dubbo官网的原话，[点此链接查看](http://dubbo.apache.org/zh-cn/docs/source_code_guide/export-service.html)：
 
   > ```txt
   > Dubbo 服务导出过程始于 Spring 容器发布刷新事件，Dubbo 在接收到事件后，会立即执行服务导出逻辑
@@ -81,7 +83,7 @@
 * 根据我们最开始的总结，服务导出分为如下三步：
 
   ```txt
-  1、前置工作：主要用于检查参数、组装URL  <=====>  **类似于Spring在初始化bean时定义的一系列BeanDefinition**
+  1、前置工作：主要用于检查参数、组装URL  <=====>  类似于Spring在初始化bean时定义的一系列BeanDefinition
   2、导出服务：包括服务导出到本地和导出到远程 
   3、服务注册：向注册中心注册当前被导出的服务
   ```
@@ -110,7 +112,7 @@
 
   ![exportUrl.png](./exportUrl.png)
 
-  此URL代表着当前服务的一些基本信息，比如它位于哪一个应用程序(application变量)，位于哪一台主机上(host变量)，在spring中对应的bean的名称(bean.name变量)，服务的类型(interface)，包含哪些方法(methods)。而在将服务注册到注册中心时，URL又是另外一些模样。这里等到服务注册步骤时再罗列出来。
+  **此URL代表着当前服务的一些基本信息，比如它位于哪一个应用程序(application变量)，位于哪一台主机上(host变量)，在spring中对应的bean的名称(bean.name变量)，服务的类型(interface)，包含哪些方法(methods)**。而在将服务注册到注册中心时，URL又是另外一些模样。这里等到服务注册步骤时再罗列出来。
 
 * 组装URL的步骤比较麻烦，建议仔细阅读官网，因为URL针对Dubbo而言超级重要，以下文字来自于官网：
 
@@ -200,7 +202,7 @@
 
 ## 五、总结
 
-* 整个服务导出路程是严格按照官网的流程来进行总结的，把官方没有描述的一些技术给完善了。要了解服务导出的底层原理，首先得把**自适应扩展机制、ProxyFactory、Wrapper类搞明白**，还有个最重要的是要时刻关注**URL**的变化，因为很多自适应扩展机制的代码，代码没有变，但因为url的某个参数发生了变化，就变成另外一个类来执行逻辑了。
+* 整个服务导出过程是严格按照官网的流程来进行总结的，把官方没有描述的一些技术给完善了。要了解服务导出的底层原理，首先得把**自适应扩展机制、ProxyFactory、Wrapper类搞明白**，还有个最重要的是要时刻关注**URL**的变化，因为很多自适应扩展机制的代码，代码没有变，但因为url的某个参数发生了变化，就变成另外一个类来执行逻辑了。
 * **如果你觉得我的文章有用的话，欢迎点赞和关注。:laughing:**
 * **I'm a slow walker, but I never walk backwards**
 
