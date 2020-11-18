@@ -1033,6 +1033,7 @@
       //Ensure that a new exporter instance is returned every time export
       return new DestroyableExporter<>(exporter);
   }
+  ```
 ```
   
 主要做了如下几件事情：
@@ -1043,14 +1044,18 @@
   3、向注册中心订阅override数据
   4、创建并返回DestroyableExporter
 ```
-  
+
 * 导出服务对应的invoker对象的源码：
 
   类似于Dubbo源码工程的测试用例(**org.apache.dubbo.rpc.proxy.AbstractProxyTest#testGetInvoker**)，默认情况下获取的都是AbstractProxyInvoker的匿名内部类，其内部维护了当前服务的Wrapper对象，最终AbstractProxyyInvoker对象内部的invoke方法的doInvoke方法将委托给Wrapper类来执行。
 
-  
+## 七、使用Dubbo在开发过程中遇到的问题
 
-  
+### 7.1 Dubbo的@Service注解的功能
+
+* Dubbo的@Service注解的功能很明显，对于Dubbo而言，它就是一个服务暴露的作用，它会在spring中对应一个类型叫ServiceBean的bean。**也就是说在Dubbo服务暴露的过程中，我们的服务提供者其实是将这个bean保存到spring容器中去了，如果我们的服务提供者想使用这个bean的一些功能时，直接注入就可以了。**因此，我们的服务提供者是能从spring容器中获取到服务提供者的这个对象的，并且这个对象没有经过Dubbo包装，它就是一个普通的spring的bean，没有RPC调用的功能。
+
+
 
 
 
