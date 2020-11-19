@@ -1053,6 +1053,17 @@
 
 ### 7.1 Dubbo的@Service注解的功能
 
+* Dubbo自己开发的**@Service**注解的功能比较强大，它相当于强化了Spring的**@Service**注解。在spring的**@Service**注解中，它仅仅是标识当前类是一个spring的bean对象。但Dubbo开发的**@Service**注解则不一样了，它除了拥有spring **@Service**注解的功能外，还有一个服务暴露的功能。它会在spring的容器中注册两个bean，分别为当前标识的类以及对应的ServiceBean对象。按照官网的服务提供者项目(**dubbo-demo-annotation-provider**)而言，它将**DemoServiceImpl**类作为一个服务暴露出去了，在程序的执行过程中，Spring容器会出现和**DemoServiceImpl**类相关的两个bean，bean的名字分别为：
+
+  ```txt
+  1、DemoServiceImpl
+  2、ServiceBean:org.apache.dubbo.demo.DemoService
+  ```
+
+  第一个bean可以理解成就是spring的bean对象，第二个bean则是Dubbo进行服务导出时需要的bean了，这个名字的标识度非常高，一眼就能知道，名字叫**ServiceBean:org.apache.dubbo.demo.DemoService**的bean，是服务**org.apache.dubbo.demo.DemoService**导出时对应的ServiceBean，后续要导出**org.apache.dubbo.demo.DemoService**服务，则可以根据名字叫**ServiceBean:org.apache.dubbo.demo.DemoService**的bean来获取服务信息。
+
+  因此，针对于服务提供者而言，Dubbo的@Service注解会在当前spring应用程序中创建两个bean，如果我们在服务提供者需要使用具体的服务时，直接使用spring的依赖注入即可，此时注入的是单纯的spring的bean，而不是用@Refrence注解来引入服务，防止服务内部调用自己逻辑时，增加一层网络的消耗。因为，@Refrence注解是Dubbo在底层处理，生成的一个具有RPC调用的代理对象，并且把它放到了spring容器中了。
+
 * Dubbo的@Service注解的功能很明显，对于Dubbo而言，它就是一个服务暴露的作用，它会在spring中对应一个类型叫ServiceBean的bean。**也就是说在Dubbo服务暴露的过程中，我们的服务提供者其实是将这个bean保存到spring容器中去了，如果我们的服务提供者想使用这个bean的一些功能时，直接注入就可以了。**因此，我们的服务提供者是能从spring容器中获取到服务提供者的这个对象的，并且这个对象没有经过Dubbo包装，它就是一个普通的spring的bean，没有RPC调用的功能。
 
 
